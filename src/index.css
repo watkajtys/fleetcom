@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer utilities {
+  .crt-overlay {
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+    background-size: 100% 3px;
+    pointer-events: none;
+  }
+  
+  .radar-sweep {
+    background: conic-gradient(from 0deg, transparent 70%, rgba(37, 99, 235, 0.1) 95%, rgba(37, 99, 235, 0.4) 100%);
+    border-radius: 50%;
+    animation: spin 4s linear infinite;
+  }
+
+  .radar-grid {
+    background-image: 
+      radial-gradient(circle at center, transparent 74.5%, rgba(30, 58, 138, 0.6) 75%, transparent 75.5%),
+      radial-gradient(circle at center, transparent 49.5%, rgba(30, 58, 138, 0.6) 50%, transparent 50.5%),
+      radial-gradient(circle at center, transparent 24.5%, rgba(30, 58, 138, 0.6) 25%, transparent 25.5%);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+body {
+  background-color: #030712; /* Very dark, almost black */
+  color: #e2e8f0; /* slate-200 for better readability than pure cyan */
+  overflow: hidden;
+}
+
