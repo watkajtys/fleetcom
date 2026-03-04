@@ -92,17 +92,17 @@ export interface MissionEvent {
 export const MISSION_STEPS: MissionEvent[] = [
   {
     time: 10,
-    message: 'ATC: TRACK 101 SQUAWKING 7500. DEVIATING FROM ASSIGNED FLIGHT PATH. INTENTIONS UNKNOWN.',
+    message: 'ATC: FLIGHT EK404 SQUAWKING 7500. DEVIATING FROM ASSIGNED FLIGHT PATH. INTENTIONS UNKNOWN.',
     type: 'WARN',
     tracks: [
       // The deviator. Heading 120 points from (10,10) towards Burj Khalifa (60,40)
-      createCrossingTrack('UNKNOWN', 'FW', 10, 10, 120, 500, 31000)
+      { ...createCrossingTrack('UNKNOWN', 'FW', 10, 10, 120, 500, 31000), id: 'FLT-EK404' }
     ]
   },
   {
     time: 20,
-    message: 'THIS IS HUNTRESS WITH AN ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT. SCRAMBLE IMMEDIATELY. VECTOR 320, BUSTER.',
-    type: 'INFO',
+    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT. SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404. BUSTER.',
+    type: 'ACTION',
     tracks: [
       // VIPER-01 launching from Al Minhad (65, 65). Starts low and slow, will accelerate/climb.
       { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-01', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} }
@@ -117,48 +117,39 @@ export const MISSION_STEPS: MissionEvent[] = [
     ]
   },
   {
-    time: 28,
-    message: 'INFO: VIPER-03 AIRBORNE.',
-    type: 'INFO',
-    tracks: [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-03', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} }
-    ]
-  },
-  {
-    time: 32,
-    message: 'INFO: VIPER-04 AIRBORNE.',
-    type: 'INFO',
-    tracks: [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'VIPER-04', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
-    ]
-  },
-  {
-    time: 60,
-    message: 'WARNING RED. MULTIPLE BOGEYS DETECTED. EVALUATED HOSTILE UAS SWARM. WEAPONS FREE.',
+    time: 90,
+    message: 'WARNING RED. MULTIPLE HIGH-ALTITUDE, HIGH-VELOCITY TRACKS DETECTED. EVALUATED HOSTILE MRBM. VELOCITY MACH 6. DESCENDING THROUGH FL600. IMPACT DUBAI 90 SECONDS. RECOMMEND IMMEDIATE THAAD ENGAGEMENT.',
     type: 'ALERT',
     tracks: [
-      // 24x Shahed-136 from Iran (North/NW). Low altitude, slow speed.
-      // Enough to be a serious threat and drain magazines if engaged improperly, but not 120.
-      ...Array.from({length: 24}).map(() => createTargetTrack(
-        'PENDING', 'UAS', 
-        315 + Math.random() * 30, // Bearing 315-345
-        75 + Math.random() * 10,  // 75-85 NM away
-        110 + Math.random() * 20, // 110-130 knots
-        200 + Math.random() * 300, // 200-500 ft altitude
-        'LCL'
+      // 4x MRBMs from Iran (North) - Mach 6+ (roughly 3500-4000 knots), extreme altitude
+      ...Array.from({length: 4}).map(() => createTargetTrack(
+        'PENDING', 'TBM',
+        340 + Math.random() * 20, // Bearing 340-360
+        85 + Math.random() * 5,   // 85 NM away
+        3800 + Math.random() * 400, // Mach 6+
+        150000 + Math.random() * 20000, // Descending from extreme altitude
+        'L16'
       ))
     ]
   },
   {
-    time: 140,
-    message: 'WARNING RED. MULTIPLE FAST MOVERS DETECTED. EVALUATED HOSTILE CRUISE MISSILES. TERRAIN MASKING INDICATED.',
+    time: 120,
+    message: 'WARNING RED. MASSIVE LOW-ALTITUDE SIGNATURES DETECTED SEAWARD. EVALUATED MIXED UAS/CM SWARM. SATURATION ATTACK IMMINENT. CONSERVE HIGH-VALUE INTERCEPTORS.',
     type: 'ALERT',
     tracks: [
-      // 8x Quds-2 LACMs sneaking through the mountains
-      // Delayed to arrive while fighters are busy with the UAS swarm
+      // 20x Shahed-136 from Iran (North/NW). Low altitude, slow speed.
+      ...Array.from({length: 20}).map(() => createTargetTrack(
+        'PENDING', 'UAS', 
+        315 + Math.random() * 30, // Bearing 315-345
+        60 + Math.random() * 10,  // 60-70 NM away
+        100 + Math.random() * 15, // ~100-115 knots
+        200 + Math.random() * 300, // 200-500 ft altitude
+        'LCL'
+      )),
+      // 8x Cruise Missiles sneaking through, faster but terrain hugging
       ...Array.from({length: 8}).map(() => createTargetTrack(
         'PENDING', 'CM', 
-        60 + Math.random() * 40, // Bearing 060-100 (East)
+        300 + Math.random() * 60, // Bearing 300-360
         65 + Math.random() * 5,  // 65-70 NM away
         450 + Math.random() * 30, // 450-480 knots
         300 + Math.random() * 200, // 300-500 ft altitude
@@ -167,29 +158,19 @@ export const MISSION_STEPS: MissionEvent[] = [
     ]
   },
   {
-    time: 220,
-    message: 'ALARM RED. SCUD LAUNCHES DETECTED. INBOUND DUBAI. CRITERIA MET. WEAPONS FREE.',
-    type: 'ALERT',
+    time: 130,
+    message: 'HUNTRESS: SCRAMBLE VIPER 03 FLIGHT TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
+    type: 'ACTION',
     tracks: [
-      // 6x MRBMs from Iran (North)
-      // The knockout blow, arriving when defenses are stressed
-      ...Array.from({length: 6}).map(() => createTargetTrack(
-        'PENDING', 'TBM', 
-        340 + Math.random() * 20, // Bearing 340-360
-        85 + Math.random() * 5,   // 85 NM away
-        4000 + Math.random() * 500, // Mach 6+
-        200000 + Math.random() * 50000, // 200k+ ft
-        'L16' 
-      )),
-      // 4x MRBMs from Yemen (South/SW)
-      ...Array.from({length: 4}).map(() => createTargetTrack(
-        'PENDING', 'TBM', 
-        180 + Math.random() * 40, // Bearing 180-220
-        85 + Math.random() * 5,   // 85 NM away
-        4000 + Math.random() * 500, // Mach 6+
-        200000 + Math.random() * 50000, // 200k+ ft
-        'L16' 
-      ))
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-03', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} }
+    ]
+  },
+  {
+    time: 134,
+    message: 'INFO: VIPER-04 AIRBORNE.',
+    type: 'INFO',
+    tracks: [
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'VIPER-04', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
     ]
   }
 ];
