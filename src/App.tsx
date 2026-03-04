@@ -548,71 +548,117 @@ export default function App() {
 
     const sweepTimer = setInterval(() => {
       const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
-      const splashes: { targetId: string, fighterId: string, interceptTime: number }[] = [];
 
       setTracks(currentTracks => {
-        let nextTracks = currentTracks.map(track => {
+        // 1. Progress intercepts and identify splashes
+        let nextTracks = currentTracks.map(t => {
+          if (t.engagedBy && t.interceptTtl !== undefined) {
+            return { ...t, interceptTtl: Math.max(0, t.interceptTtl - 3) }; // 3 sec per sweep
+          }
+          return t;
+        });
+
+        // Identify splashes
+        nextTracks.forEach(t => {
+          if (t.engagedBy && t.interceptTtl === 0) {
+            events.push({ type: 'LOG', message: `TRACK ${t.id} SPLASH. (${t.engagedBy})`, logType: 'INFO' });
+          }
+        });
+
+        // Remove splashed targets
+        nextTracks = nextTracks.filter(t => !(t.engagedBy && t.interceptTtl === 0));
+
+        // 2. Standard movement and physics
+        nextTracks = nextTracks.map(track => {
           let newSpd = track.spd;
           let newAlt = track.alt;
           let newHdg = track.hdg;
+          let newTargetWaypoint = track.targetWaypoint;
 
-          if (track.isFighter && track.alt < 30000) {
-            newSpd = Math.min(1000, track.spd + 50);
-            newAlt = Math.min(30000, track.alt + 1500);
-          }
+          if (track.isFighter) {
+            // Dynamic Throttle
+            let targetSpd = 450; // Cruise
+            if (track.isRTB) targetSpd = 550;
+            else if (newTargetWaypoint) targetSpd = 1100; // Afterburner
 
-          if (track.isFighter && track.targetWaypoint) {
-            const dx = track.targetWaypoint.x - track.x;
-            const dy = track.targetWaypoint.y - track.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist > 1) {
-              let desiredHdg = Math.atan2(dx, -dy) * (180 / Math.PI);
-              if (desiredHdg < 0) desiredHdg += 360;
+            // Smooth speed transition
+            if (newSpd < targetSpd) newSpd = Math.min(targetSpd, newSpd + 150);
+            else if (newSpd > targetSpd) newSpd = Math.max(targetSpd, newSpd - 100);
+
+            // Scramble climb
+            if (track.alt < 30000) newAlt = Math.min(30000, track.alt + 1500);
+
+            // Maneuvering
+            if (newTargetWaypoint) {
+              const dx = newTargetWaypoint.x - track.x;
+              const dy = newTargetWaypoint.y - track.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
               
-              let hdgDiff = desiredHdg - newHdg;
-              if (hdgDiff > 180) hdgDiff -= 360;
-              if (hdgDiff < -180) hdgDiff += 360;
-              
-              const turnRate = Math.max(-15, Math.min(15, hdgDiff));
-              newHdg = (newHdg + turnRate + 360) % 360;
-            } else if (!track.isRTB) {
+              if (dist > 1.5) {
+                let desiredHdg = Math.atan2(dx, -dy) * (180 / Math.PI);
+                if (desiredHdg < 0) desiredHdg += 360;
+                let hdgDiff = desiredHdg - newHdg;
+                if (hdgDiff > 180) hdgDiff -= 360;
+                if (hdgDiff < -180) hdgDiff += 360;
+                const turnRate = Math.max(-30, Math.min(30, hdgDiff));
+                newHdg = (newHdg + turnRate + 360) % 360;
+              } else {
+                if (!track.isRTB) {
+                  newTargetWaypoint = null;
+                  newHdg = (newHdg + 10) % 360;
+                  events.push({ type: 'LOG', message: `${track.id}: On station.`, logType: 'INFO' });
+                }
+              }
+            } else {
               newHdg = (newHdg + 10) % 360;
             }
           }
 
-          const speedFactor = newSpd / 1200; 
+          const speedFactor = (newSpd / 1200) * 3; 
           const rad = newHdg * (Math.PI / 180);
           let newX = track.x + Math.sin(rad) * speedFactor;
           let newY = track.y - Math.cos(rad) * speedFactor;
 
           const isStealthy = track.category === 'UAS' || track.alt < 1000;
-          let newTq = track.tq;
-          if (isStealthy) {
-            newTq = Math.max(1, Math.min(9, track.tq + (Math.random() > 0.5 ? 1 : -1)));
-          }
-          const coasting = newTq <= 2;
-
           const rangeToBattery = calculateRange(newX, newY, BATTERY_POS.x, BATTERY_POS.y);
           const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(track.alt));
           const isDetected = track.sensor === 'L16' || rangeToBattery <= radarHorizonNm;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
-          return { ...track, x: newX, y: newY, history: newHistory, tq: newTq, coasting, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg };
+          return { ...track, x: newX, y: newY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint };
         });
 
-        // Fighter Auto-Engagement Logic
+        // 3. Fighter VID and Auto-Engagement
         const hostiles = nextTracks.filter(t => t.type === 'HOSTILE' && !t.engagedBy && (t.category === 'UAS' || t.category === 'CM' || t.category === 'FW'));
+        const unknowns = nextTracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
         const targetedHostileIds = new Set<string>();
 
         nextTracks = nextTracks.map(track => {
-          if (!track.isFighter || (track.missilesRemaining || 0) <= 0 || track.isRTB) return track;
+          if (!track.isFighter || track.isRTB) return track;
+
+          // Visual ID Logic (VID)
+          unknowns.forEach(u => {
+            if (calculateRange(track.x, track.y, u.x, u.y) < 3.0) {
+              const uInNext = nextTracks.find(t => t.id === u.id);
+              if (uInNext && !uInNext.iffInterrogated) {
+                const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
+                uInNext.iffInterrogated = true;
+                uInNext.type = uInNext.id === 'FLT-EK404' ? 'SUSPECT' : 'HOSTILE';
+                uInNext.threatName = threatName;
+                events.push({ type: 'LOG', message: `${track.id}: TRACK ${u.id} VID ${threatName}.`, logType: 'ALERT' });
+              }
+            }
+          });
+
+          if ((track.missilesRemaining || 0) <= 0) return track;
           
           const MAX_DETECT_RANGE = 50;
-          const WEAPON_RANGE = 18; // Increased range slightly
+          const WEAPON_RANGE = 18;
+          const SELF_DEFENSE_RANGE = 12;
+          const searchRange = track.targetWaypoint ? SELF_DEFENSE_RANGE : MAX_DETECT_RANGE;
 
           let closestHostile: Track | null = null;
-          let minRange = MAX_DETECT_RANGE;
+          let minRange = searchRange;
 
           for (const hostile of hostiles) {
             if (hostile.engagedBy || targetedHostileIds.has(hostile.id)) continue;
@@ -625,21 +671,16 @@ export default function App() {
 
           if (closestHostile) {
             targetedHostileIds.add(closestHostile.id);
-            
             const bearingToTarget = calculateBearing(track.x, track.y, closestHostile.x, closestHostile.y);
             let aspectDiff = Math.abs(track.hdg - bearingToTarget);
             if (aspectDiff > 180) aspectDiff = 360 - aspectDiff;
 
-            const WEAPON_ASPECT_LIMIT = 45;
-
-            if (minRange <= WEAPON_RANGE && aspectDiff <= WEAPON_ASPECT_LIMIT) {
+            if (minRange <= WEAPON_RANGE && aspectDiff <= 45) {
               const targetId = closestHostile.id;
               const fighterId = track.id;
               const interceptTime = minRange * 1000;
-              const launchPos = { x: track.x, y: track.y };
 
-              splashes.push({ targetId, fighterId, interceptTime });
-              events.push({ type: 'LOG', message: `${fighterId} ENGAGING TRK ${targetId} (FOX-3). MISSILES REMAINING: ${track.missilesRemaining! - 1}`, logType: 'ACTION' });
+              events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
               events.push({ type: 'COST', amount: 1200000 });
 
               const targetInNext = nextTracks.find(t => t.id === targetId);
@@ -647,24 +688,26 @@ export default function App() {
                 targetInNext.engagedBy = fighterId;
                 targetInNext.engagementTime = Date.now();
                 targetInNext.interceptDuration = interceptTime;
-                targetInNext.launchPos = launchPos;
+                targetInNext.interceptTtl = Math.ceil(interceptTime / 1000);
+                targetInNext.launchPos = { x: track.x, y: track.y };
               }
 
-              return { 
-                ...track, 
-                missilesRemaining: track.missilesRemaining! - 1,
-                hdg: (track.hdg + 60) % 360
-              };
+              return { ...track, missilesRemaining: track.missilesRemaining! - 1, hdg: (track.hdg + 60) % 360, targetWaypoint: null };
             } else {
+              // Log acquisition
+              if (!track.targetWaypoint || track.targetWaypoint.x !== closestHostile!.x) {
+                events.push({ type: 'LOG', message: `${track.id}: Intercepting TRACK ${closestHostile.id}.`, logType: 'INFO' });
+              }
               return { ...track, targetWaypoint: { x: closestHostile.x, y: closestHostile.y } };
             }
           }
           return track;
         });
 
+        // 4. Cleanup and RTB
         nextTracks = nextTracks.map(track => {
           if (track.isFighter && track.missilesRemaining === 0 && !track.isRTB) {
-            events.push({ type: 'LOG', message: `${track.id} WINCHESTER. RTB AL MINHAD.`, logType: 'INFO' });
+            events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
             return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
           }
           return track;
@@ -672,22 +715,13 @@ export default function App() {
 
         return nextTracks.filter(t => 
           !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 65, 65) < 2) &&
-          t.x >= -50 && t.x <= 150 && t.y >= -50 && t.y <= 150
+          t.x >= -100 && t.x <= 200 && t.y >= -100 && t.y <= 200
         );
       });
 
-      // Process collected events outside of the state update
       events.forEach(e => {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
         if (e.type === 'COST') setDefenseCost(prev => prev + e.amount!);
-      });
-
-      splashes.forEach(s => {
-        setTimeout(() => {
-          setTracks(current => current.filter(t => t.id !== s.targetId));
-          setHookedTrackIds(prev => prev.filter(tid => tid !== s.targetId));
-          addLog(`TRK ${s.targetId} SPLASH. TARGET DESTROYED BY ${s.fighterId}.`, 'INFO');
-        }, s.interceptTime);
       });
 
     }, 3000);
@@ -697,7 +731,6 @@ export default function App() {
       clearInterval(sweepTimer);
     };
   }, [addLog]);
-
   // --- INTERACTION HELPERS ---
 
   const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent, container: HTMLDivElement) => {
