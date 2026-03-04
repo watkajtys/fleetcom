@@ -638,8 +638,10 @@ export default function App() {
               const uInNext = nextTracks.find(t => t.id === u.id);
               if (uInNext && !uInNext.iffInterrogated) {
                 const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
+                const threatType = uInNext.id === 'FLT-EK404' ? 'SUSPECT' : 'HOSTILE';
                 uInNext.iffInterrogated = true;
-                uInNext.type = uInNext.id === 'FLT-EK404' ? 'SUSPECT' : 'HOSTILE';
+                // Hardening: Preserve manual HOSTILE status
+                if (uInNext.type !== 'HOSTILE') uInNext.type = threatType;
                 uInNext.threatName = threatName;
                 events.push({ type: 'LOG', message: `${track.id}: TRACK ${u.id} VID ${threatName}.`, logType: 'ALERT' });
               }
