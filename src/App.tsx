@@ -160,7 +160,7 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom }: { trac
             <line x1={1.0 / cameraZoom} y1={1.0 / cameraZoom} x2={1.8 / cameraZoom} y2={1.8 / cameraZoom} stroke={color} strokeWidth={0.1 / cameraZoom} opacity="0.8" />
             <g transform={`translate(${2.2 / cameraZoom}, ${2.2 / cameraZoom})`}>
               <text x="0" y="0" fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" fontWeight="bold" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.threatName || track.id}</text>
-              <text x="0" y={1.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.alt >= 18000 ? `FL${Math.round(track.alt/100)}` : Math.round(track.alt/100).toString().padStart(3, '0')} / {track.spd.toString().padStart(3, '0')}</text>
+              <text x="0" y={1.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.alt >= 18000 ? `FL${Math.round(track.alt/100)}` : Math.round(track.alt/100).toString().padStart(3, '0')} / {Math.round(track.spd).toString().padStart(3, '0')}</text>
               <text x="0" y={2.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>TQ: {track.tq} {track.coasting ? 'CST' : ''}</text>
             </g>
           </g>
@@ -401,10 +401,10 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
                 </div>
                 
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">SPD (KTS)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{hookedTrack.spd.toString().padStart(4, '0')}</div>
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{Math.round(hookedTrack.spd).toString().padStart(4, '0')}</div>
                 
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">CSE (DEG)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{hookedTrack.hdg.toString().padStart(3, '0')}</div>
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{Math.round(hookedTrack.hdg).toString().padStart(3, '0')}</div>
 
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">BRG (DEG)</div>
                 <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{brg}</div>
