@@ -17,6 +17,7 @@ export interface Track {
   engagedBy: 'PAC-3' | 'SHORAD' | 'THAAD' | 'VIPER' | string | null;
   engagementTime?: number;
   interceptDuration?: number;
+  interceptTtl?: number;
   launchPos?: {x: number, y: number};
   sensor: 'LCL' | 'L16' | 'FUS';
   threatName?: string;

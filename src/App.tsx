@@ -14,64 +14,39 @@ const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, 
 
   useEffect(() => {
     if (!track.engagementTime || !track.interceptDuration) return;
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 100); // Higher frequency for smooth vector movement
+    const interval = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(interval);
   }, [track.engagementTime, track.interceptDuration]);
 
-  if (!track.engagementTime || !track.interceptDuration) return null;
+  if (!track.engagementTime || !track.interceptDuration || track.interceptTtl === undefined) return null;
   
-  const elapsed = now - track.engagementTime;
-  const progress = Math.min(1, elapsed / track.interceptDuration);
-  const tti = Math.max(0, Math.ceil((track.interceptDuration - elapsed) / 1000));
+  // Use logical interceptTtl as the primary timer to stay in sync with the sweep
+  const elapsedSinceLastSweep = (now % 3000) / 1000;
+  const smoothTti = Math.max(0, track.interceptTtl - elapsedSinceLastSweep);
+  const totalDuration = track.interceptDuration / 1000;
+  const progress = Math.min(1, 1 - (smoothTti / totalDuration));
 
-  if (progress >= 1 || tti <= 0) return null;
+  if (progress >= 1 || smoothTti <= 0) return null;
 
   const startX = track.launchPos ? track.launchPos.x : BATTERY_POS.x;
   const startY = track.launchPos ? track.launchPos.y : BATTERY_POS.y;
 
-  // Linear interpolation for current missile position
   const missileX = startX + (track.x - startX) * progress;
   const missileY = startY + (track.y - startY) * progress;
 
-  // Calculate a short lead vector towards the target
   const dx = track.x - missileX;
   const dy = track.y - missileY;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const vectorLen = 2.0; // 2 NM lead line
-  const leadX = dist > 0 ? missileX + (dx / dist) * Math.min(vectorLen, dist) : missileX;
-  const leadY = dist > 0 ? missileY + (dy / dist) * Math.min(vectorLen, dist) : missileY;
+  const leadX = dist > 0 ? missileX + (dx / dist) * Math.min(2.0, dist) : missileX;
+  const leadY = dist > 0 ? missileY + (dy / dist) * Math.min(2.0, dist) : missileY;
 
   return (
     <g>
-      {/* Fly-out path (Launched point to Missile) */}
-      <line 
-        x1={startX} y1={startY} 
-        x2={missileX} y2={missileY} 
-        stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} 
-        opacity="0.4"
-      />
-      {/* Active Lead Vector (Short line in front of missile) */}
-      <line 
-        x1={missileX} y1={missileY} 
-        x2={leadX} y2={leadY} 
-        stroke={color} strokeWidth={0.2 / cameraZoom}
-        className="animate-pulse"
-      />
-      {/* Missile Symbol */}
+      <line x1={startX} y1={startY} x2={missileX} y2={missileY} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" />
+      <line x1={missileX} y1={missileY} x2={leadX} y2={leadY} stroke={color} strokeWidth={0.2 / cameraZoom} className="animate-pulse" />
       <circle cx={missileX} cy={missileY} r={0.3 / cameraZoom} fill={color} />
-      {/* TTI Text at Missile Position */}
-      <text 
-        x={missileX} 
-        y={missileY - (1.2 / cameraZoom)} 
-        fill={color} 
-        fontSize={0.7 / cameraZoom} 
-        fontFamily="monospace" 
-        textAnchor="middle"
-        style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}
-      >
-        TTI: {tti}s
+      <text x={missileX} y={missileY - (1.2 / cameraZoom)} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
+        TTI: {Math.ceil(smoothTti)}s
       </text>
     </g>
   );
@@ -680,7 +655,15 @@ export default function App() {
             if (minRange <= WEAPON_RANGE && aspectDiff <= 45) {
               const targetId = closestHostile.id;
               const fighterId = track.id;
-              const interceptTime = minRange * 1000;
+              
+              // Closure rate for Fighter AAM (Missile Speed + Fighter Speed + Target Speed)
+              const missileSpdNmSec = 1.0; // Mach 4.5
+              const fighterSpdNmSec = track.spd / 3600;
+              const targetSpdNmSec = closestHostile.spd / 3600;
+              const closureRate = missileSpdNmSec + fighterSpdNmSec + targetSpdNmSec;
+              
+              const interceptTimeSecs = minRange / closureRate;
+              const interceptTimeMs = interceptTimeSecs * 1000;
 
               events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
               events.push({ type: 'COST', amount: 1200000 });
@@ -689,8 +672,8 @@ export default function App() {
               if (targetInNext) {
                 targetInNext.engagedBy = fighterId;
                 targetInNext.engagementTime = Date.now();
-                targetInNext.interceptDuration = interceptTime;
-                targetInNext.interceptTtl = Math.ceil(interceptTime / 1000);
+                targetInNext.interceptDuration = interceptTimeMs;
+                targetInNext.interceptTtl = Math.ceil(interceptTimeSecs);
                 targetInNext.launchPos = { x: track.x, y: track.y };
               }
 
@@ -978,22 +961,24 @@ export default function App() {
         setDefenseCost(prev => prev + stats.cost);
         addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
         
-        const interceptTime = Math.max(3000, (rng / (weapon === "THAAD" ? 1.5 : 0.7)) * 1000); 
+        const targetSpdNmSec = target.spd / 3600;
+        const missileSpdNmSec = weapon === "THAAD" ? 1.5 : 0.7; // Mach 8 vs Mach 4
+        
+        // Closure rate calculation (simplistic head-on assumption for SAMs)
+        const closureRate = missileSpdNmSec + targetSpdNmSec;
+        const interceptTimeSecs = rng / closureRate;
+        const interceptTimeMs = interceptTimeSecs * 1000;
+
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
 
         setTracks(current => current.map(t => t.id === id ? { 
           ...t, 
           engagedBy: weapon,
           engagementTime: Date.now(),
-          interceptDuration: interceptTime,
+          interceptDuration: interceptTimeMs,
+          interceptTtl: Math.ceil(interceptTimeSecs),
           launchPos
         } : t));
-
-        setTimeout(() => {
-          setTracks(current => current.filter(t => t.id !== id));
-          setHookedTrackIds(prev => prev.filter(tid => tid !== id));
-          addLog(`TRK ${id} SPLASH. TARGET DESTROYED.`, 'INFO');
-        }, interceptTime);
       }, index * 500);
     });
   }, [hookedTrackIds, inventory]);
