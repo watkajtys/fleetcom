@@ -9,81 +9,77 @@ import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSET
 import { getThreatName, calculateRange, calculateBearing, calculateKinematics } from './utils';
 import { MISSION_STEPS } from './mission';
 
-const EngagementLine = React.memo(({ startX, startY, target, cameraZoom }: { startX: number, startY: number, target: Track, cameraZoom: number }) => {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (!target.engagementTime || !target.interceptDuration) return;
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [target.engagementTime, target.interceptDuration]);
-
-  if (!target.engagementTime || !target.interceptDuration) return null;
-  const timeElapsed = now - target.engagementTime;
-  const timeLeft = Math.max(0, target.interceptDuration - timeElapsed);
-  const ttiSecs = Math.ceil(timeLeft / 1000);
-
-  if (ttiSecs <= 0) return null;
-
-  return (
-    <g>
-      <line
-        x1={startX} y1={startY}
-        x2={target.x} y2={target.y}
-        stroke="#FF0033" strokeWidth={0.3 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`}
-        opacity="0.8"
-      />
-      <text
-        x={(startX + target.x) / 2}
-        y={(startY + target.y) / 2}
-        fill="#FF0033"
-        fontSize={1.5 / cameraZoom}
-        fontFamily="monospace"
-        fontWeight="bold"
-        className="drop-shadow-md"
-      >
-        TTI {ttiSecs}
-      </text>
-    </g>
-  );
-});
-
-const TTIDisplay = React.memo(({ startX, startY, track, color, cameraZoom }: { startX: number, startY: number, track: Track, color: string, cameraZoom: number }) => {
+const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, color: string, cameraZoom: number }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     if (!track.engagementTime || !track.interceptDuration) return;
     const interval = setInterval(() => {
       setNow(Date.now());
-    }, 1000);
+    }, 100); // Higher frequency for smooth vector movement
     return () => clearInterval(interval);
   }, [track.engagementTime, track.interceptDuration]);
 
   if (!track.engagementTime || !track.interceptDuration) return null;
-  const tti = Math.max(0, Math.ceil((track.interceptDuration - (now - track.engagementTime)) / 1000));
+  
+  const elapsed = now - track.engagementTime;
+  const progress = Math.min(1, elapsed / track.interceptDuration);
+  const tti = Math.max(0, Math.ceil((track.interceptDuration - elapsed) / 1000));
 
-  if (tti <= 0) return null;
+  if (progress >= 1 || tti <= 0) return null;
+
+  const startX = track.launchPos ? track.launchPos.x : BATTERY_POS.x;
+  const startY = track.launchPos ? track.launchPos.y : BATTERY_POS.y;
+
+  // Linear interpolation for current missile position
+  const missileX = startX + (track.x - startX) * progress;
+  const missileY = startY + (track.y - startY) * progress;
+
+  // Calculate a short lead vector towards the target
+  const dx = track.x - missileX;
+  const dy = track.y - missileY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const vectorLen = 2.0; // 2 NM lead line
+  const leadX = dist > 0 ? missileX + (dx / dist) * Math.min(vectorLen, dist) : missileX;
+  const leadY = dist > 0 ? missileY + (dy / dist) * Math.min(vectorLen, dist) : missileY;
 
   return (
-    <text 
-      x={(startX + track.x) / 2}
-      y={(startY + track.y) / 2 - (1 / cameraZoom)}
-      fill={color} 
-      fontSize={0.8 / cameraZoom} 
-      fontFamily="monospace" 
-      textAnchor="middle"
-      style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}
-    >
-      TTI: {tti}s
-    </text>
+    <g>
+      {/* Fly-out path (Launched point to Missile) */}
+      <line 
+        x1={startX} y1={startY} 
+        x2={missileX} y2={missileY} 
+        stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} 
+        opacity="0.4"
+      />
+      {/* Active Lead Vector (Short line in front of missile) */}
+      <line 
+        x1={missileX} y1={missileY} 
+        x2={leadX} y2={leadY} 
+        stroke={color} strokeWidth={0.2 / cameraZoom}
+        className="animate-pulse"
+      />
+      {/* Missile Symbol */}
+      <circle cx={missileX} cy={missileY} r={0.3 / cameraZoom} fill={color} />
+      {/* TTI Text at Missile Position */}
+      <text 
+        x={missileX} 
+        y={missileY - (1.2 / cameraZoom)} 
+        fill={color} 
+        fontSize={0.7 / cameraZoom} 
+        fontFamily="monospace" 
+        textAnchor="middle"
+        style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}
+      >
+        TTI: {tti}s
+      </text>
+    </g>
   );
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void },
-  nextProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }
+  prevProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number },
+  nextProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
   if (prevProps.shooter !== nextProps.shooter) return false;
@@ -92,13 +88,14 @@ const trackSymbolAreEqual = (
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, setHookedTrackId }: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }) => {
+const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom }: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number }) => {
   if (track.detected === false) return null;
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
   if (track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') color = '#00FFFF'; // Pure Cyan
   if (track.type === 'HOSTILE') color = '#FF0000'; // Pure Red
   if (track.type === 'NEUTRAL') color = '#00FF00'; // Pure Green
+  if (track.type === 'SUSPECT') color = '#FF8800'; // Orange
 
   // 2-minute velocity vector (Speed in knots / 60 mins * 2 mins)
   const vectorLength = (track.spd / 60) * 0.5; 
@@ -108,18 +105,18 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, setHooke
 
   return (
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
-      {/* Pairing Line & TTI */}
+      {/* Pairing Line (Shooter to Target) */}
       {track.engagedBy && (
-        <g>
-          <line 
-            x1={startX} y1={startY}
-            x2={track.x} y2={track.y} 
-            stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
-            className="animate-pulse"
-          />
-          <TTIDisplay startX={startX} startY={startY} track={track} color={color} cameraZoom={cameraZoom} />
-        </g>
+        <line 
+          x1={startX} y1={startY}
+          x2={track.x} y2={track.y} 
+          stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
+          className="animate-pulse"
+        />
       )}
+
+      {/* Missile Vector & TTI */}
+      {track.engagedBy && <MissileVector track={track} color={color} cameraZoom={cameraZoom} />}
 
       {/* Track History Breadcrumbs */}
       {track.history.map((pos, i) => (
@@ -128,7 +125,6 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, setHooke
       
       <g 
         transform={`translate(${track.x}, ${track.y})`} 
-        onClick={() => setHookedTrackId(track.id)}
         className="cursor-pointer"
       >
         {/* Invisible larger hit area for easier clicking */}
@@ -160,9 +156,9 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, setHooke
         {isHooked && (
           <g>
             {/* Leader Line */}
-            <line x1={0.8 / cameraZoom} y1={0.8 / cameraZoom} x2={2.5 / cameraZoom} y2={2.5 / cameraZoom} stroke={color} strokeWidth={0.1 / cameraZoom} opacity="0.8" />
-            <g transform={`translate(${3 / cameraZoom}, ${3 / cameraZoom})`}>
-              <text x="0" y="0" fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" fontWeight="bold" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.id}</text>
+            <line x1={1.0 / cameraZoom} y1={1.0 / cameraZoom} x2={1.8 / cameraZoom} y2={1.8 / cameraZoom} stroke={color} strokeWidth={0.1 / cameraZoom} opacity="0.8" />
+            <g transform={`translate(${2.2 / cameraZoom}, ${2.2 / cameraZoom})`}>
+              <text x="0" y="0" fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" fontWeight="bold" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.threatName || track.id}</text>
               <text x="0" y={1.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.alt >= 18000 ? `FL${Math.round(track.alt/100)}` : Math.round(track.alt/100).toString().padStart(3, '0')} / {track.spd.toString().padStart(3, '0')}</text>
               <text x="0" y={2.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>TQ: {track.tq} {track.coasting ? 'CST' : ''}</text>
             </g>
@@ -244,7 +240,7 @@ const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
   </>
 ));
 
-const TrackSummaryTable = React.memo(({ tracks, hookedTrackId, setHookedTrackId }: { tracks: Track[], hookedTrackId: string | null, setHookedTrackId: (id: string) => void }) => {
+const TrackSummaryTable = React.memo(({ tracks, hookedTrackIds, setHookedTrackIds }: { tracks: Track[], hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>> }) => {
   return (
     <aside className="flex-1 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
       <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center gap-2 shrink-0">
@@ -265,17 +261,24 @@ const TrackSummaryTable = React.memo(({ tracks, hookedTrackId, setHookedTrackId 
           <tbody className="divide-y divide-[#001A26]">
             {tracks.filter(t => t.detected !== false).map(t => {
               const range = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1);
-              const isHooked = t.id === hookedTrackId;
+              const isHooked = hookedTrackIds.includes(t.id);
               let typeColor = 'text-[#FFFF00]';
               if (t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND') typeColor = 'text-[#00FFFF]';
               if (t.type === 'HOSTILE') typeColor = 'text-[#FF0000]';
               if (t.type === 'NEUTRAL') typeColor = 'text-[#00FF00]';
+              if (t.type === 'SUSPECT') typeColor = 'text-[#FF8800]';
 
               return (
                 <tr 
                   key={t.id} 
                   className={`cursor-pointer hover:bg-[#001A26] transition-colors ${isHooked ? 'bg-[#002B40] outline outline-1 outline-[#00E5FF]' : ''} ${t.coasting ? 'opacity-50' : ''}`}
-                  onClick={() => setHookedTrackId(t.id)}
+                  onClick={() => {
+                    setHookedTrackIds(prev => 
+                      prev.includes(t.id) 
+                        ? prev.filter(tid => tid !== t.id) 
+                        : [t.id]
+                    );
+                  }}
                 >
                   <td className="py-2 px-3 font-bold text-[#00E5FF]">{t.id}</td>
                   <td className={`py-2 px-2 font-bold ${typeColor}`}>{t.threatName ? t.threatName.substring(0, 4).toUpperCase() : t.type.substring(0, 4)}</td>
@@ -328,7 +331,10 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTrack, masterWarning, vectoringTrackId, setVectoringTrackId }: { hookedTrack: Track | undefined, masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void }) => {
+const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVectoringTrackId }: { hookedTracks: Track[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void }) => {
+  const hookedTrack = hookedTracks.length === 1 ? hookedTracks[0] : undefined;
+  const isGroup = hookedTracks.length > 1;
+
   const kinematics = hookedTrack ? calculateKinematics(hookedTrack) : null;
   const brg = hookedTrack ? calculateBearing(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y).toString().padStart(3, '0') : '';
   const rng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1).padStart(4, '0') : '';
@@ -339,11 +345,34 @@ const Tote = React.memo(({ hookedTrack, masterWarning, vectoringTrackId, setVect
     <aside className={`w-[300px] bg-[#001A26]/20 backdrop-blur-md border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-colors duration-300 h-fit`}>
       <div className={`px-3 py-2 border-b ${masterWarning ? 'bg-[#440000]/20 border-[#FF0033]' : 'bg-[#001A26]/20 border-[#002B40]'} flex items-center gap-2 shrink-0`}>
         <span className={masterWarning ? 'text-[#FF0033] font-bold' : 'text-[#00E5FF] font-bold'}>[DATA]</span>
-        <h2 className={`text-xs font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>HOOKED TRACK DATA</h2>
+        <h2 className={`text-xs font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>{isGroup ? `GROUP TRACK DATA (${hookedTracks.length})` : 'HOOKED TRACK DATA'}</h2>
       </div>
       
       <div className="p-4 flex flex-col gap-4">
-        {hookedTrack ? (
+        {isGroup ? (
+          <div className="space-y-4">
+            <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
+              <div className="text-[10px] text-[#004466] mb-2 uppercase tracking-tighter">Selection Breakdown</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="text-[#FF0000]">HOSTILE: {hookedTracks.filter(t => t.type === 'HOSTILE').length}</div>
+                <div className="text-[#00FFFF]">FRIENDLY: {hookedTracks.filter(t => t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND').length}</div>
+                <div className="text-[#FFFF00]">PENDING: {hookedTracks.filter(t => t.type === 'PENDING' || t.type === 'UNKNOWN').length}</div>
+                <div className="text-[#FF8800]">SUSPECT: {hookedTracks.filter(t => t.type === 'SUSPECT').length}</div>
+              </div>
+            </div>
+            <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
+              <div className="text-[10px] text-[#004466] mb-2 uppercase tracking-tighter">Category Summary</div>
+              <div className="space-y-1 text-xs text-[#00E5FF]">
+                {Array.from(new Set(hookedTracks.map(t => t.category))).map(cat => (
+                  <div key={cat} className="flex justify-between border-b border-[#002B40]/30 py-1">
+                    <span>{cat}</span>
+                    <span className="font-bold">{hookedTracks.filter(t => t.category === cat).length}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : hookedTrack ? (
           <>
             {/* Header Block */}
             <div className="border border-[#002B40] bg-[#000A14]/30 p-3 flex justify-between items-center">
@@ -352,6 +381,7 @@ const Tote = React.memo(({ hookedTrack, masterWarning, vectoringTrackId, setVect
                 (hookedTrack.type === 'FRIEND' || hookedTrack.type === 'ASSUMED_FRIEND') ? 'border-[#00FFFF] text-[#00FFFF] bg-[#00FFFF]/10' :
                 hookedTrack.type === 'HOSTILE' ? 'border-[#FF0000] text-[#FF0000] bg-[#FF0000]/10 animate-pulse' :
                 hookedTrack.type === 'NEUTRAL' ? 'border-[#00FF00] text-[#00FF00] bg-[#00FF00]/10' :
+                hookedTrack.type === 'SUSPECT' ? 'border-[#FF8800] text-[#FF8800] bg-[#FF8800]/10' :
                 'border-[#FFFF00] text-[#FFFF00] bg-[#FFFF00]/10'
               }`}>
                 {hookedTrack.threatName || hookedTrack.type}
@@ -452,7 +482,7 @@ const Tote = React.memo(({ hookedTrack, masterWarning, vectoringTrackId, setVect
 
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
-  const [hookedTrackId, setHookedTrackId] = useState<string | null>(null);
+  const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
     { id: 1, time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
@@ -464,8 +494,10 @@ export default function App() {
   const simTimeRef = useRef(0);
 
   // Camera State
-  const [camera, setCamera] = useState({ x: 50, y: 50, zoom: 1 });
+  const [camera, setCamera] = useState({ x: BATTERY_POS.x, y: BATTERY_POS.y, zoom: 0.5 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, endX: number, endY: number } | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [followedTrackId, setFollowedTrackId] = useState<string | null>(null);
   const [vectoringTrackId, setVectoringTrackId] = useState<string | null>(null);
@@ -498,11 +530,12 @@ export default function App() {
 
       const event = MISSION_STEPS.find(e => e.time === simTimeRef.current);
       if (event) {
-        setTracks(current => [...current, ...event.tracks]);
+        const newTracks = event.generateTracks();
+        setTracks(current => [...current, ...newTracks]);
         addLog(event.message, event.type);
 
         // Calculate enemy cost for this wave
-        const waveCost = event.tracks.reduce((acc, t) => {
+        const waveCost = newTracks.reduce((acc, t) => {
           if (t.category === 'UAS') return acc + 20000; // $20k per drone
           if (t.category === 'CM') return acc + 1500000; // $1.5M per cruise missile
           if (t.category === 'TBM') return acc + 3000000; // $3M per TBM
@@ -513,30 +546,29 @@ export default function App() {
     }, 1000);
 
     const sweepTimer = setInterval(() => {
-      const currentTracks = tracksRef.current;
-      let nextTracks = currentTracks.map(track => {
-        let newSpd = track.spd;
+      const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
+      const splashes: { targetId: string, fighterId: string, interceptTime: number }[] = [];
+
+      setTracks(currentTracks => {
+        let nextTracks = currentTracks.map(track => {
+          let newSpd = track.spd;
           let newAlt = track.alt;
           let newHdg = track.hdg;
 
-          // Scramble physics: Friendly fighters starting low/slow will rapidly climb and accelerate to intercept speed
           if (track.isFighter && track.alt < 30000) {
-            newSpd = Math.min(1000, track.spd + 50); // +1000 knots per min acceleration
-            newAlt = Math.min(30000, track.alt + 1500); // +30,000 ft per min climb rate
+            newSpd = Math.min(1000, track.spd + 50);
+            newAlt = Math.min(30000, track.alt + 1500);
           }
 
-          // Fighter Vectoring Logic
           if (track.isFighter && track.targetWaypoint) {
             const dx = track.targetWaypoint.x - track.x;
             const dy = track.targetWaypoint.y - track.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
             if (dist > 1) {
-              // Calculate desired heading
               let desiredHdg = Math.atan2(dx, -dy) * (180 / Math.PI);
               if (desiredHdg < 0) desiredHdg += 360;
               
-              // Simple turn rate (max 15 deg per sweep)
               let hdgDiff = desiredHdg - newHdg;
               if (hdgDiff > 180) hdgDiff -= 360;
               if (hdgDiff < -180) hdgDiff += 360;
@@ -544,14 +576,12 @@ export default function App() {
               const turnRate = Math.max(-15, Math.min(15, hdgDiff));
               newHdg = (newHdg + turnRate + 360) % 360;
             } else if (!track.isRTB) {
-              // Reached waypoint and not RTB -> Orbit (turn right slowly)
               newHdg = (newHdg + 10) % 360;
             }
           }
 
           const speedFactor = newSpd / 1200; 
           const rad = newHdg * (Math.PI / 180);
-          
           let newX = track.x + Math.sin(rad) * speedFactor;
           let newY = track.y - Math.cos(rad) * speedFactor;
 
@@ -563,7 +593,7 @@ export default function App() {
           const coasting = newTq <= 2;
 
           const rangeToBattery = calculateRange(newX, newY, BATTERY_POS.x, BATTERY_POS.y);
-          const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(track.alt)); // Radar at 100ft MSL
+          const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(track.alt));
           const isDetected = track.sensor === 'L16' || rangeToBattery <= radarHorizonNm;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
@@ -571,24 +601,21 @@ export default function App() {
         });
 
         // Fighter Auto-Engagement Logic
-        const fighters = nextTracks.filter(t => t.isFighter && (t.missilesRemaining || 0) > 0);
         const hostiles = nextTracks.filter(t => t.type === 'HOSTILE' && !t.engagedBy && (t.category === 'UAS' || t.category === 'CM' || t.category === 'FW'));
         const targetedHostileIds = new Set<string>();
 
-        fighters.forEach(fighter => {
-          if ((fighter.missilesRemaining || 0) <= 0) return;
-          if (fighter.isRTB) return;
+        nextTracks = nextTracks.map(track => {
+          if (!track.isFighter || (track.missilesRemaining || 0) <= 0 || track.isRTB) return track;
           
-          // Radar/Datalink range for targeting
           const MAX_DETECT_RANGE = 50;
-          const WEAPON_RANGE = 15;
+          const WEAPON_RANGE = 18; // Increased range slightly
 
           let closestHostile: Track | null = null;
           let minRange = MAX_DETECT_RANGE;
 
           for (const hostile of hostiles) {
             if (hostile.engagedBy || targetedHostileIds.has(hostile.id)) continue;
-            const range = calculateRange(fighter.x, fighter.y, hostile.x, hostile.y);
+            const range = calculateRange(track.x, track.y, hostile.x, hostile.y);
             if (range < minRange) {
               minRange = range;
               closestHostile = hostile;
@@ -598,88 +625,161 @@ export default function App() {
           if (closestHostile) {
             targetedHostileIds.add(closestHostile.id);
             
-            if (minRange <= WEAPON_RANGE) {
-              // Within range, FIRE!
-              closestHostile.engagedBy = fighter.id;
-              closestHostile.engagementTime = Date.now();
-              closestHostile.interceptDuration = minRange * 1000; // 1 second per NM for AAM
-              fighter.missilesRemaining = (fighter.missilesRemaining || 0) - 1;
+            const bearingToTarget = calculateBearing(track.x, track.y, closestHostile.x, closestHostile.y);
+            let aspectDiff = Math.abs(track.hdg - bearingToTarget);
+            if (aspectDiff > 180) aspectDiff = 360 - aspectDiff;
 
-              // Safe to trigger side effects here because we are outside the React state updater
-              addLog(`${fighter.id} ENGAGING TRK ${closestHostile.id} (FOX-3). MISSILES REMAINING: ${fighter.missilesRemaining}`, 'ACTION');
-              setDefenseCost(prev => prev + 1200000); // $1.2M per AMRAAM
+            const WEAPON_ASPECT_LIMIT = 45;
 
-              // Crank away from target slightly after firing (e.g. 60 deg offset)
-              fighter.hdg = (fighter.hdg + 60) % 360;
+            if (minRange <= WEAPON_RANGE && aspectDiff <= WEAPON_ASPECT_LIMIT) {
+              const targetId = closestHostile.id;
+              const fighterId = track.id;
+              const interceptTime = minRange * 1000;
+              const launchPos = { x: track.x, y: track.y };
 
-              // Schedule target destruction
-              setTimeout(() => {
-                setTracks(current => current.filter(t => t.id !== closestHostile.id));
-                setHookedTrackId(currentId => currentId === closestHostile.id ? null : currentId);
-                addLog(`TRK ${closestHostile.id} SPLASH. TARGET DESTROYED BY ${fighter.id}.`, 'INFO');
-              }, minRange * 1000);
+              splashes.push({ targetId, fighterId, interceptTime });
+              events.push({ type: 'LOG', message: `${fighterId} ENGAGING TRK ${targetId} (FOX-3). MISSILES REMAINING: ${track.missilesRemaining! - 1}`, logType: 'ACTION' });
+              events.push({ type: 'COST', amount: 1200000 });
+
+              const targetInNext = nextTracks.find(t => t.id === targetId);
+              if (targetInNext) {
+                targetInNext.engagedBy = fighterId;
+                targetInNext.engagementTime = Date.now();
+                targetInNext.interceptDuration = interceptTime;
+                targetInNext.launchPos = launchPos;
+              }
+
+              return { 
+                ...track, 
+                missilesRemaining: track.missilesRemaining! - 1,
+                hdg: (track.hdg + 60) % 360
+              };
             } else {
-              // Not in range yet, vector towards target
-              fighter.targetWaypoint = { x: closestHostile.x, y: closestHostile.y };
+              return { ...track, targetWaypoint: { x: closestHostile.x, y: closestHostile.y } };
             }
           }
+          return track;
         });
 
-        // Fighter RTB Logic
-        const allFighters = nextTracks.filter(t => t.isFighter);
-        allFighters.forEach(fighter => {
-          if (fighter.missilesRemaining === 0 && !fighter.isRTB) {
-            fighter.isRTB = true;
-            fighter.targetWaypoint = { x: 65, y: 65 }; // Base coordinates (Al Minhad)
-            addLog(`${fighter.id} WINCHESTER. RTB AL MINHAD.`, 'INFO');
+        nextTracks = nextTracks.map(track => {
+          if (track.isFighter && track.missilesRemaining === 0 && !track.isRTB) {
+            events.push({ type: 'LOG', message: `${track.id} WINCHESTER. RTB AL MINHAD.`, logType: 'INFO' });
+            return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
           }
+          return track;
         });
 
-        // Remove landed fighters
-        nextTracks = nextTracks.filter(t => !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 65, 65) < 2));
+        return nextTracks.filter(t => 
+          !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 65, 65) < 2) &&
+          t.x >= -50 && t.x <= 150 && t.y >= -50 && t.y <= 150
+        );
+      });
 
-        setTracks(nextTracks.filter(track => track.x >= -20 && track.x <= 120 && track.y >= -20 && track.y <= 120));
+      // Process collected events outside of the state update
+      events.forEach(e => {
+        if (e.type === 'LOG') addLog(e.message!, e.logType);
+        if (e.type === 'COST') setDefenseCost(prev => prev + e.amount!);
+      });
+
+      splashes.forEach(s => {
+        setTimeout(() => {
+          setTracks(current => current.filter(t => t.id !== s.targetId));
+          setHookedTrackIds(prev => prev.filter(tid => tid !== s.targetId));
+          addLog(`TRK ${s.targetId} SPLASH. TARGET DESTROYED BY ${s.fighterId}.`, 'INFO');
+        }, s.interceptTime);
+      });
+
     }, 3000);
 
     return () => {
       clearInterval(clockTimer);
       clearInterval(sweepTimer);
     };
+  }, [addLog]);
+
+  // --- INTERACTION HELPERS ---
+
+  const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent, container: HTMLDivElement) => {
+    const svg = container.querySelector('svg');
+    if (!svg) return { x: 0, y: 0 };
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const svgP = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+    return { x: svgP ? svgP.x : 0, y: svgP ? svgP.y : 0 };
   }, []);
 
-  const cursorRef = useRef<HTMLSpanElement>(null);
-
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const coords = getMapCoords(e, e.currentTarget);
+
     if (vectoringTrackId) {
-      const svg = e.currentTarget.querySelector('svg');
-      if (!svg) return;
-      const pt = svg.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const svgP = pt.matrixTransform(svg.getScreenCTM()?.inverse());
-      
-      if (svgP) {
-        setTracks(current => current.map(t => 
-          t.id === vectoringTrackId ? { ...t, targetWaypoint: { x: svgP.x, y: svgP.y } } : t
-        ));
-        addLog(`VECTOR COMMAND ISSUED TO ${vectoringTrackId}`, 'ACTION');
-      }
+      setTracks(current => current.map(t => 
+        t.id === vectoringTrackId ? { ...t, targetWaypoint: { x: coords.x, y: coords.y } } : t
+      ));
+      addLog(`VECTOR COMMAND ISSUED TO ${vectoringTrackId}`, 'ACTION');
       setVectoringTrackId(null);
       return;
     }
 
-    setIsDragging(true);
-    setDragStart({ x: e.clientX, y: e.clientY });
-    setFollowedTrackId(null);
+    if (e.shiftKey) {
+      // Toggle logic or start box select
+      const CLICK_RADIUS = 2.0;
+      const nearbyTracks = tracksRef.current
+        .filter(t => t.detected !== false)
+        .filter(t => calculateRange(t.x, t.y, coords.x, coords.y) <= CLICK_RADIUS);
+
+      if (nearbyTracks.length > 0) {
+        // Shift + Click on a track: toggle its selection state
+        const targetId = nearbyTracks[0].id;
+        setHookedTrackIds(prev => prev.includes(targetId) ? prev.filter(id => id !== targetId) : [...prev, targetId]);
+      } else {
+        // Shift + Click on background: start marquee
+        setIsSelecting(true);
+        setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
+      }
+    } else {
+      // Single Click / Cycle handling
+      const CLICK_RADIUS = 2.0;
+      const nearbyTracks = tracksRef.current
+        .filter(t => t.detected !== false)
+        .filter(t => calculateRange(t.x, t.y, coords.x, coords.y) <= CLICK_RADIUS);
+
+      if (nearbyTracks.length > 0) {
+        const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
+        const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
+        
+        if (currentIndex !== -1 && nearbyTracks.length > 1) {
+          const nextIndex = (currentIndex + 1) % nearbyTracks.length;
+          setHookedTrackIds([nearbyTracks[nextIndex].id]);
+        } else {
+          setHookedTrackIds([nearbyTracks[0].id]);
+        }
+      } else {
+        // Truly empty background click
+        if (e.target === e.currentTarget || (e.target instanceof SVGElement && e.target.tagName === 'svg')) {
+          setHookedTrackIds([]);
+        }
+      }
+      
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      setFollowedTrackId(null);
+    }
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const viewBoxWidth = 100 / camera.zoom;
-    const viewBoxHeight = 100 / camera.zoom;
-    const scale = Math.max(viewBoxWidth / rect.width, viewBoxHeight / rect.height);
-    
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isSelecting && selectionBox) {
+      const coords = getMapCoords(e, e.currentTarget);
+      setSelectionBox(prev => prev ? { ...prev, endX: coords.x, endY: coords.y } : null);
+      return;
+    }
+
     if (isDragging) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const viewBoxWidth = 100 / camera.zoom;
+      const viewBoxHeight = 100 / camera.zoom;
+      const scale = Math.max(viewBoxWidth / rect.width, viewBoxHeight / rect.height);
+      
       const dx = e.clientX - dragStart.x;
       const dy = e.clientY - dragStart.y;
       setCamera(prev => ({
@@ -689,22 +789,34 @@ export default function App() {
       }));
       setDragStart({ x: e.clientX, y: e.clientY });
     }
-
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const mapX = camera.x + (e.clientX - rect.left - centerX) * scale;
-    const mapY = camera.y + (e.clientY - rect.top - centerY) * scale;
-    
-    // Simulated MGRS conversion for visual authenticity
-    const easting = Math.floor(Math.abs(mapX) * 100).toString().padStart(4, '0');
-    const northing = Math.floor(Math.abs(mapY) * 100).toString().padStart(4, '0');
-    if (cursorRef.current) {
-      cursorRef.current.textContent = `40R DQ ${easting} ${northing}`;
-    }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isSelecting && selectionBox) {
+      const x1 = Math.min(selectionBox.startX, selectionBox.endX);
+      const x2 = Math.max(selectionBox.startX, selectionBox.endX);
+      const y1 = Math.min(selectionBox.startY, selectionBox.endY);
+      const y2 = Math.max(selectionBox.startY, selectionBox.endY);
+
+      // Identify tracks in box
+      const inBox = tracksRef.current
+        .filter(t => t.detected !== false)
+        .filter(t => t.x >= x1 && t.x <= x2 && t.y >= y1 && t.y <= y2)
+        .map(t => t.id);
+
+      if (inBox.length > 0) {
+        setHookedTrackIds(prev => e.shiftKey ? Array.from(new Set([...prev, ...inBox])) : inBox);
+        addLog(`GROUP HOOK: ${inBox.length} TRACKS SELECTED`, 'INFO');
+      } else if (!e.shiftKey) {
+        // Only clear if not adding to selection
+        // Actually, if you draw an empty box, it usually clears.
+        setHookedTrackIds([]);
+      }
+    }
+
     setIsDragging(false);
+    setIsSelecting(false);
+    setSelectionBox(null);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -721,197 +833,194 @@ export default function App() {
     });
   };
 
-  const hookedTrack = tracks.find(t => t.id === hookedTrackId);
-
   // --- TACTICAL ACTIONS ---
 
   const handleInterrogate = useCallback(() => {
-    if (!hookedTrack) return;
-    addLog(`INTERROGATING TRK ${hookedTrack.id}...`, 'ACTION');
-    setTimeout(() => {
-      const isSweet = hookedTrack.spd > 250 && hookedTrack.alt > 10000;
-      setTracks(currentTracks => currentTracks.map(t => t.id === hookedTrack.id ? { ...t, iffInterrogated: true, type: isSweet ? 'ASSUMED_FRIEND' : 'UNKNOWN' } : t));
-      if (isSweet) addLog(`TRK ${hookedTrack.id} IFF SWEET (MODE 3/C VALID)`, 'INFO');
-      else addLog(`TRK ${hookedTrack.id} IFF SOUR (NO RESPONSE)`, 'WARN');
-    }, 1500);
-  }, [hookedTrack]);
+    if (hookedTrackIds.length === 0) return;
+    
+    hookedTrackIds.forEach((id, index) => {
+      const track = tracksRef.current.find(t => t.id === id);
+      if (!track || track.isInterrogating || track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') return;
+
+      // Stagger multiple interrogations for visual effect
+      setTimeout(() => {
+        setTracks(current => current.map(t => t.id === id ? { ...t, isInterrogating: true } : t));
+        addLog(`INTERROGATING TRK ${id}...`, 'ACTION');
+
+        setTimeout(() => {
+          const isHijack = id === 'FLT-EK404';
+          const currentTrack = tracksRef.current.find(t => t.id === id);
+          if (!currentTrack) return;
+
+          const isSweet = !isHijack && 
+                         (currentTrack.category === 'FW' || currentTrack.category === 'RW') && 
+                         (currentTrack.spd > 250 && currentTrack.alt > 10000);
+          
+          let message = '';
+          let logType: 'INFO' | 'WARN' | 'ALERT' = 'INFO';
+          
+          if (isHijack) {
+            message = `TRK ${id} IFF SOUR (SQUAWK 7500 - HIJACK)`;
+            logType = 'ALERT';
+          } else if (isSweet) {
+            message = `TRK ${id} IFF SWEET (MODE 3/C VALID)`;
+            logType = 'INFO';
+          } else {
+            message = `TRK ${id} IFF SOUR (NO RESPONSE)`;
+            logType = 'WARN';
+          }
+
+          addLog(message, logType);
+
+          setTracks(currentTracks => currentTracks.map(t => {
+            if (t.id !== id) return t;
+            let update = { ...t, iffInterrogated: true, isInterrogating: false };
+            if (t.type === 'HOSTILE' || t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND') return update;
+            if (isHijack) return { ...update, type: 'SUSPECT', threatName: 'HIJACK' };
+            if (isSweet) return { ...update, type: 'FRIEND' };
+            return { ...update, type: 'UNKNOWN' };
+          }));
+        }, 1500);
+      }, index * 200);
+    });
+  }, [hookedTrackIds]);
 
   const handleDeclare = useCallback((newType: TrackType) => {
-    if (!hookedTrack) return;
-    const threatName = newType === 'HOSTILE' ? getThreatName(hookedTrack.category) : undefined;
-    setTracks(currentTracks => currentTracks.map(t => t.id === hookedTrack.id ? { ...t, type: newType, threatName } : t));
-    addLog(`TRK ${hookedTrack.id} DECLARED ${newType}`, newType === 'HOSTILE' ? 'ALERT' : 'WARN');
-  }, [hookedTrack]);
+    if (hookedTrackIds.length === 0) return;
+    
+    setTracks(currentTracks => currentTracks.map(t => {
+      if (!hookedTrackIds.includes(t.id)) return t;
+      
+      let threatName = t.threatName;
+      if (newType === 'HOSTILE') {
+        if (t.id === 'FLT-EK404') threatName = 'HIJACK';
+        else if (t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND') threatName = t.threatName || t.id;
+        else threatName = getThreatName(t.category);
+      } else if (newType === 'SUSPECT' || newType === 'UNKNOWN') {
+        if (t.id !== 'FLT-EK404') threatName = undefined;
+      }
+      return { ...t, type: newType, threatName };
+    }));
+
+    addLog(`GROUP DECLARE: ${hookedTrackIds.length} TRACKS SET TO ${newType}`, newType === 'HOSTILE' ? 'ALERT' : 'WARN');
+  }, [hookedTrackIds]);
 
   const handleEngage = useCallback((weapon: 'PAC-3' | 'SHORAD' | 'THAAD') => {
-    if (!hookedTrack) return;
+    if (hookedTrackIds.length === 0) return;
 
     const stats = WEAPON_STATS[weapon];
-    const rng = calculateRange(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y);
+    let currentPac3 = inventory.pac3;
+    let currentShorad = inventory.shorad;
+    let currentThaad = inventory.thaad;
 
-    if (rng > stats.range) {
-      addLog(`TRK ${hookedTrack.id} OUT OF RANGE FOR ${weapon} (MAX ${stats.range}NM)`, 'ALERT');
-      return;
-    }
+    hookedTrackIds.forEach((id, index) => {
+      const target = tracksRef.current.find(t => t.id === id);
+      if (!target || target.type !== 'HOSTILE' || target.engagedBy) return;
 
-    if (weapon === 'PAC-3' && inventory.pac3 <= 0) {
-      addLog(`PAC-3 MAGAZINE DEPLETED. CANNOT ENGAGE.`, 'ALERT');
-      return;
-    }
-    if (weapon === 'SHORAD' && inventory.shorad <= 0) {
-      addLog(`SHORAD MAGAZINE DEPLETED. CANNOT ENGAGE.`, 'ALERT');
-      return;
-    }
+      const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
+      if (rng > stats.range) return;
 
-    if (weapon === 'PAC-3') setInventory(prev => ({ ...prev, pac3: prev.pac3 - 1 }));
-    if (weapon === 'THAAD') setInventory(prev => ({ ...prev, thaad: prev.thaad - 1 }));
-    if (weapon === 'SHORAD') setInventory(prev => ({ ...prev, shorad: prev.shorad - 1 }));
-    
-    setDefenseCost(prev => prev + stats.cost);
+      // Check magazine
+      if (weapon === 'PAC-3' && currentPac3 <= 0) return;
+      if (weapon === 'SHORAD' && currentShorad <= 0) return;
+      if (weapon === 'THAAD' && currentThaad <= 0) return;
 
-    addLog(`BIRDS AWAY. ENGAGING TRK ${hookedTrack.id} WITH ${weapon}`, 'ACTION');
-    
-    const interceptTime = Math.max(3000, (rng / 2) * 1000);
+      // Deduct from local count for this loop
+      if (weapon === 'PAC-3') currentPac3--;
+      if (weapon === 'SHORAD') currentShorad--;
+      if (weapon === 'THAAD') currentThaad--;
 
-    setTracks(current => current.map(t => t.id === hookedTrack.id ? { 
-      ...t, 
-      engagedBy: weapon,
-      engagementTime: Date.now(),
-      interceptDuration: interceptTime
-    } : t));
+      // Stagger launches
+      setTimeout(() => {
+        setInventory(prev => ({
+          ...prev,
+          pac3: weapon === 'PAC-3' ? prev.pac3 - 1 : prev.pac3,
+          shorad: weapon === 'SHORAD' ? prev.shorad - 1 : prev.shorad,
+          thaad: weapon === 'THAAD' ? prev.thaad - 1 : prev.thaad,
+        }));
+        
+        setDefenseCost(prev => prev + stats.cost);
+        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
+        
+        const interceptTime = Math.max(3000, (rng / 2) * 1000);
+        const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
 
-    setTimeout(() => {
-      setTracks(current => current.filter(t => t.id !== hookedTrack.id));
-      setHookedTrackId(currentId => currentId === hookedTrack.id ? null : currentId);
-      addLog(`TRK ${hookedTrack.id} SPLASH. TARGET DESTROYED.`, 'INFO');
-    }, interceptTime);
-  }, [hookedTrack, inventory]);
+        setTracks(current => current.map(t => t.id === id ? { 
+          ...t, 
+          engagedBy: weapon,
+          engagementTime: Date.now(),
+          interceptDuration: interceptTime,
+          launchPos
+        } : t));
+
+        setTimeout(() => {
+          setTracks(current => current.filter(t => t.id !== id));
+          setHookedTrackIds(prev => prev.filter(tid => tid !== id));
+          addLog(`TRK ${id} SPLASH. TARGET DESTROYED.`, 'INFO');
+        }, interceptTime);
+      }, index * 500);
+    });
+  }, [hookedTrackIds, inventory]);
 
   const handleAckAlerts = useCallback(() => {
     setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
   }, []);
 
-  const hookedTrackRef = useRef(hookedTrack);
   const unackAlertsRef = useRef(unackAlerts);
   const inventoryRef = useRef(inventory);
 
   useEffect(() => {
-    hookedTrackRef.current = hookedTrack;
     unackAlertsRef.current = unackAlerts;
     inventoryRef.current = inventory;
-  }, [hookedTrack, unackAlerts, inventory]);
+  }, [unackAlerts, inventory]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input (though we don't have any yet)
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      const currentHooked = hookedTrackRef.current;
-      const currentUnack = unackAlertsRef.current;
-      const currentInv = inventoryRef.current;
-
       switch (e.key) {
         case '1':
-          if (currentHooked) setHookedTrackId(null);
+          setHookedTrackIds([]);
           break;
         case '2':
-          if (currentHooked && (currentHooked.type === 'PENDING' || currentHooked.type === 'UNKNOWN')) {
-            // Need to directly inline the dispatch because handleInterrogate relies on stale state
-            addLog(`INTERROGATING TRK ${currentHooked.id}...`, 'ACTION');
-            setTimeout(() => {
-              const isSweet = currentHooked.spd > 250 && currentHooked.alt > 10000;
-              setTracks(currentTracks => currentTracks.map(t => t.id === currentHooked.id ? { ...t, iffInterrogated: true, type: isSweet ? 'ASSUMED_FRIEND' : 'UNKNOWN' } : t));
-              if (isSweet) addLog(`TRK ${currentHooked.id} IFF SWEET (MODE 3/C VALID)`, 'INFO');
-              else addLog(`TRK ${currentHooked.id} IFF SOUR (NO RESPONSE)`, 'WARN');
-            }, 1500);
-          }
+          handleInterrogate();
           break;
         case '3':
-          if (currentHooked && currentHooked.type !== 'HOSTILE' && currentHooked.type !== 'FRIEND') {
-             const newType = 'HOSTILE';
-             const threatName = getThreatName(currentHooked.category);
-             setTracks(currentTracks => currentTracks.map(t => t.id === currentHooked.id ? { ...t, type: newType, threatName } : t));
-             addLog(`TRK ${currentHooked.id} DECLARED ${newType}`, 'ALERT');
-          }
+          const anyHostile = tracksRef.current.some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
+          handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
           break;
         case '4':
-          if (currentHooked && currentHooked.type === 'HOSTILE' && currentHooked.engagedBy === null) {
-            handleEngageWeapon('THAAD', currentHooked, currentInv);
-          }
+          handleEngage('THAAD');
           break;
         case '5':
-          if (currentHooked && currentHooked.type === 'HOSTILE' && currentHooked.engagedBy === null) {
-            handleEngageWeapon('PAC-3', currentHooked, currentInv);
-          }
+          handleEngage('PAC-3');
           break;
         case '6':
-          if (currentHooked && currentHooked.type === 'HOSTILE' && currentHooked.engagedBy === null) {
-            handleEngageWeapon('SHORAD', currentHooked, currentInv);
-          }
+          handleEngage('SHORAD');
           break;
         case '7':
-          if (currentUnack.length > 0) {
-             setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
-          }
+          setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
           break;
       }
     };
 
-    const handleEngageWeapon = (weapon: 'PAC-3' | 'SHORAD' | 'THAAD', target: Track, currentInv: {pac3: number, shorad: number, thaad: number}) => {
-       const stats = WEAPON_STATS[weapon];
-       const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
-
-       if (rng > stats.range) {
-         addLog(`TRK ${target.id} OUT OF RANGE FOR ${weapon} (MAX ${stats.range}NM)`, 'ALERT');
-         return;
-       }
-
-       if (weapon === 'PAC-3' && currentInv.pac3 <= 0) {
-         addLog(`PAC-3 MAGAZINE DEPLETED. CANNOT ENGAGE.`, 'ALERT');
-         return;
-       }
-       if (weapon === 'SHORAD' && currentInv.shorad <= 0) {
-         addLog(`SHORAD MAGAZINE DEPLETED. CANNOT ENGAGE.`, 'ALERT');
-         return;
-       }
-
-       if (weapon === 'PAC-3') setInventory(prev => ({ ...prev, pac3: prev.pac3 - 1 }));
-       if (weapon === 'THAAD') setInventory(prev => ({ ...prev, thaad: prev.thaad - 1 }));
-       if (weapon === 'SHORAD') setInventory(prev => ({ ...prev, shorad: prev.shorad - 1 }));
-
-       setDefenseCost(prev => prev + stats.cost);
-
-       addLog(`BIRDS AWAY. ENGAGING TRK ${target.id} WITH ${weapon}`, 'ACTION');
-
-       const interceptTime = Math.max(3000, (rng / 2) * 1000);
-
-       setTracks(current => current.map(t => t.id === target.id ? {
-         ...t,
-         engagedBy: weapon,
-         engagementTime: Date.now(),
-         interceptDuration: interceptTime
-       } : t));
-
-       setTimeout(() => {
-         setTracks(current => current.filter(t => t.id !== target.id));
-         setHookedTrackId(currentId => currentId === target.id ? null : currentId);
-         addLog(`TRK ${target.id} SPLASH. TARGET DESTROYED.`, 'INFO');
-       }, interceptTime);
-    };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []); // Empty dependencies
+  }, [hookedTrackIds, handleInterrogate, handleDeclare, handleEngage]);
 
   // --- RENDER HELPERS ---
 
+  const hookedTracks = tracks.filter(t => hookedTrackIds.includes(t.id));
+
   const masterWarning = useMemo(() => {
+    const hookedTrack = hookedTracks.length === 1 ? hookedTracks[0] : undefined;
     if (hookedTrack && hookedTrack.type === 'HOSTILE') {
       const { tcpa, cpa } = calculateKinematics(hookedTrack);
       if (tcpa < 120 && parseFloat(cpa) < 10) return true;
     }
     return false;
-  }, [hookedTrack]);
+  }, [hookedTracks]);
 
   return (
     <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
@@ -924,7 +1033,7 @@ export default function App() {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onWheel={handleWheel}
-        style={{ cursor: vectoringTrackId ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
+        style={{ cursor: vectoringTrackId ? 'crosshair' : (isDragging ? (isSelecting ? 'crosshair' : 'grabbing') : 'grab') }}
       >
         <svg 
           className="absolute inset-0 w-full h-full opacity-80" 
@@ -945,23 +1054,12 @@ export default function App() {
               />
               <circle cx={t.targetWaypoint!.x} cy={t.targetWaypoint!.y} r={0.5 / camera.zoom} fill="none" stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} />
               {t.isRTB && (
-                <text x={t.x + 2} y={t.y - 2} fill="#FFCC00" fontSize={1.5 / camera.zoom} fontFamily="monospace" fontWeight="bold">
+                <text x={t.x + 1} y={t.y - 1} fill="#FFCC00" fontSize={0.7 / camera.zoom} fontFamily="monospace" fontWeight="bold">
                   RTB
                 </text>
               )}
             </g>
           ))}
-
-          {/* Render engagement lines and TTI */}
-          {tracks.filter(t => t.engagedBy && t.engagementTime && t.interceptDuration).map(target => {
-            const shooter = tracks.find(f => f.id === target.engagedBy);
-            const startX = shooter ? shooter.x : BATTERY_POS.x;
-            const startY = shooter ? shooter.y : BATTERY_POS.y;
-
-            return (
-              <EngagementLine key={`engage-${target.id}`} startX={startX} startY={startY} target={target} cameraZoom={camera.zoom} />
-            );
-          })}
 
           {tracks.map(track => {
             const shooter = track.engagedBy ? tracks.find(t => t.id === track.engagedBy) : undefined;
@@ -970,12 +1068,26 @@ export default function App() {
                 key={`track-group-${track.id}`}
                 track={track}
                 shooter={shooter}
-                isHooked={track.id === hookedTrackId}
+                isHooked={hookedTrackIds.includes(track.id)}
                 cameraZoom={camera.zoom}
-                setHookedTrackId={setHookedTrackId}
               />
             );
           })}
+
+          {/* Render Marquee Selection Box */}
+          {selectionBox && (
+            <rect
+              x={Math.min(selectionBox.startX, selectionBox.endX)}
+              y={Math.min(selectionBox.startY, selectionBox.endY)}
+              width={Math.abs(selectionBox.endX - selectionBox.startX)}
+              height={Math.abs(selectionBox.endY - selectionBox.startY)}
+              fill="#00FFFF"
+              fillOpacity="0.1"
+              stroke="#00FFFF"
+              strokeWidth={0.2 / camera.zoom}
+              strokeDasharray={`${0.5 / camera.zoom} ${0.5 / camera.zoom}`}
+            />
+          )}
         </svg>
       </div>
 
@@ -1005,7 +1117,6 @@ export default function App() {
               {unackAlerts.length} UNACK ALERTS
             </div>
           )}
-          <span className="text-[#004466]">MGRS: <span ref={cursorRef} className="text-[#00E5FF]">40R DQ 0000 0000</span></span>
           <span className="text-[#00E5FF]">ZULU: <SystemClock /></span>
         </div>
       </header>
@@ -1017,14 +1128,14 @@ export default function App() {
         <div className="flex flex-col gap-4 w-[280px] pointer-events-auto h-full">
           
           {/* Track Summary Table */}
-          <TrackSummaryTable tracks={tracks} hookedTrackId={hookedTrackId} setHookedTrackId={setHookedTrackId} />
+          <TrackSummaryTable tracks={tracks} hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} />
 
           {/* System Event Log */}
           <SystemEventLog logs={logs} />
         </div>
 
         {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTrack={hookedTrack} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} />
+        <Tote hookedTracks={hookedTracks} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} />
       </main>
 
       {/* --- BOTTOM SOFT KEY BAR --- */}
@@ -1033,8 +1144,8 @@ export default function App() {
         
         <button 
           className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
-          disabled={!hookedTrack}
-          onClick={() => setHookedTrackId(null)}
+          disabled={hookedTrackIds.length === 0}
+          onClick={() => setHookedTrackIds([])}
         >
           <span className="text-[8px] text-[#004466] mb-0.5">1</span>
           DROP
@@ -1042,7 +1153,7 @@ export default function App() {
 
         <button 
           className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
-          disabled={!hookedTrack || (hookedTrack.type !== 'PENDING' && hookedTrack.type !== 'UNKNOWN')}
+          disabled={hookedTrackIds.length === 0}
           onClick={handleInterrogate}
         >
           <span className="text-[8px] text-[#004466] mb-0.5">2</span>
@@ -1051,16 +1162,19 @@ export default function App() {
 
         <button 
           className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
-          disabled={!hookedTrack || hookedTrack.type === 'HOSTILE' || hookedTrack.type === 'FRIEND'}
-          onClick={() => handleDeclare('HOSTILE')}
+          disabled={hookedTrackIds.length === 0}
+          onClick={() => {
+            const anyHostile = tracks.some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
+            handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
+          }}
         >
           <span className="text-[8px] text-[#004466] mb-0.5">3</span>
-          DECL HOSTILE
+          {tracks.some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE') ? 'DOWNGRADE' : 'DECL HOSTILE'}
         </button>
 
         <button 
           className="h-10 px-2 lg:px-4 bg-[#330033] border border-[#FF00FF] hover:bg-[#440033] text-[#FF00FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center ml-auto whitespace-nowrap"
-          disabled={!hookedTrack || hookedTrack.type !== 'HOSTILE' || hookedTrack.engagedBy !== null}
+          disabled={hookedTrackIds.length === 0}
           onClick={() => handleEngage('THAAD')}
         >
           <span className="text-[8px] text-[#FF00FF] opacity-50 mb-0.5">4</span>
@@ -1069,7 +1183,7 @@ export default function App() {
 
         <button 
           className="h-10 px-2 lg:px-4 bg-[#330000] border border-[#FF0033] hover:bg-[#440000] text-[#FF0033] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
-          disabled={!hookedTrack || hookedTrack.type !== 'HOSTILE' || hookedTrack.engagedBy !== null}
+          disabled={hookedTrackIds.length === 0}
           onClick={() => handleEngage('PAC-3')}
         >
           <span className="text-[8px] text-[#FF0033] opacity-50 mb-0.5">5</span>
@@ -1078,7 +1192,7 @@ export default function App() {
 
         <button 
           className="h-10 px-2 lg:px-4 bg-[#222200] border border-[#FFCC00] hover:bg-[#333300] text-[#FFCC00] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
-          disabled={!hookedTrack || hookedTrack.type !== 'HOSTILE' || hookedTrack.engagedBy !== null}
+          disabled={hookedTrackIds.length === 0}
           onClick={() => handleEngage('SHORAD')}
         >
           <span className="text-[8px] text-[#FFCC00] opacity-50 mb-0.5">6</span>

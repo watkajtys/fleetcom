@@ -86,7 +86,7 @@ export interface MissionEvent {
   time: number;
   message: string;
   type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION';
-  tracks: Track[];
+  generateTracks: () => Track[];
 }
 
 export const MISSION_STEPS: MissionEvent[] = [
@@ -94,25 +94,16 @@ export const MISSION_STEPS: MissionEvent[] = [
     time: 10,
     message: 'ATC: FLIGHT EK404 SQUAWKING 7500. DEVIATING FROM ASSIGNED FLIGHT PATH. INTENTIONS UNKNOWN.',
     type: 'WARN',
-    tracks: [
-      // The deviator. Heading 120 points from (10,10) towards Burj Khalifa (60,40)
+    generateTracks: () => [
       { ...createCrossingTrack('UNKNOWN', 'FW', 10, 10, 120, 500, 31000), id: 'FLT-EK404' }
     ]
   },
   {
     time: 20,
-    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT. SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404. BUSTER.',
+    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT (VIPER 01 & 02). SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404. BUSTER.',
     type: 'ACTION',
-    tracks: [
-      // VIPER-01 launching from Al Minhad (65, 65). Starts low and slow, will accelerate/climb.
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-01', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} }
-    ]
-  },
-  {
-    time: 24,
-    message: 'INFO: VIPER-02 AIRBORNE.',
-    type: 'INFO',
-    tracks: [
+    generateTracks: () => [
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-01', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} },
       { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'VIPER-02', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 45, y: 40} }
     ]
   },
@@ -120,56 +111,44 @@ export const MISSION_STEPS: MissionEvent[] = [
     time: 90,
     message: 'WARNING RED. MULTIPLE HIGH-ALTITUDE, HIGH-VELOCITY TRACKS DETECTED. EVALUATED HOSTILE MRBM. VELOCITY MACH 6. DESCENDING THROUGH FL600. IMPACT DUBAI 90 SECONDS. RECOMMEND IMMEDIATE THAAD ENGAGEMENT.',
     type: 'ALERT',
-    tracks: [
-      // 4x MRBMs from Iran (North) - Mach 6+ (roughly 3500-4000 knots), extreme altitude
-      ...Array.from({length: 4}).map(() => createTargetTrack(
-        'PENDING', 'TBM',
-        340 + Math.random() * 20, // Bearing 340-360
-        85 + Math.random() * 5,   // 85 NM away
-        3800 + Math.random() * 400, // Mach 6+
-        150000 + Math.random() * 20000, // Descending from extreme altitude
-        'L16'
-      ))
-    ]
+    generateTracks: () => Array.from({length: 8}).map(() => createTargetTrack(
+      'PENDING', 'TBM',
+      340 + Math.random() * 20, 
+      85 + Math.random() * 5,   
+      3800 + Math.random() * 400, 
+      150000 + Math.random() * 20000, 
+      'L16'
+    ))
   },
   {
     time: 120,
     message: 'WARNING RED. MASSIVE LOW-ALTITUDE SIGNATURES DETECTED SEAWARD. EVALUATED MIXED UAS/CM SWARM. SATURATION ATTACK IMMINENT. CONSERVE HIGH-VALUE INTERCEPTORS.',
     type: 'ALERT',
-    tracks: [
-      // 20x Shahed-136 from Iran (North/NW). Low altitude, slow speed.
+    generateTracks: () => [
       ...Array.from({length: 20}).map(() => createTargetTrack(
         'PENDING', 'UAS', 
-        315 + Math.random() * 30, // Bearing 315-345
-        60 + Math.random() * 10,  // 60-70 NM away
-        100 + Math.random() * 15, // ~100-115 knots
-        200 + Math.random() * 300, // 200-500 ft altitude
-        'LCL'
+        315 + Math.random() * 30, 
+        60 + Math.random() * 10,  
+        100 + Math.random() * 15, 
+        200 + Math.random() * 300, 
+        'L16'
       )),
-      // 8x Cruise Missiles sneaking through, faster but terrain hugging
       ...Array.from({length: 8}).map(() => createTargetTrack(
         'PENDING', 'CM', 
-        300 + Math.random() * 60, // Bearing 300-360
-        65 + Math.random() * 5,  // 65-70 NM away
-        450 + Math.random() * 30, // 450-480 knots
-        300 + Math.random() * 200, // 300-500 ft altitude
-        'LCL'
+        300 + Math.random() * 60, 
+        65 + Math.random() * 5,  
+        450 + Math.random() * 30, 
+        300 + Math.random() * 200, 
+        'L16'
       ))
     ]
   },
   {
     time: 130,
-    message: 'HUNTRESS: SCRAMBLE VIPER 03 FLIGHT TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
+    message: 'HUNTRESS: SCRAMBLE VIPER 03 FLIGHT (VIPER 03 & 04) TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
     type: 'ACTION',
-    tracks: [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-03', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} }
-    ]
-  },
-  {
-    time: 134,
-    message: 'INFO: VIPER-04 AIRBORNE.',
-    type: 'INFO',
-    tracks: [
+    generateTracks: () => [
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-03', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} },
       { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'VIPER-04', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
     ]
   }
