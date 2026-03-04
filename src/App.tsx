@@ -3,15 +3,69 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Track, TrackType, SystemLog } from './types';
 import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSETS } from './constants';
 import { getThreatName, calculateRange, calculateBearing, calculateKinematics } from './utils';
 import { MISSION_STEPS } from './mission';
 
-const TTIDisplay = React.memo(({ track, color, now, cameraZoom }: { track: Track, color: string, now: number, cameraZoom: number }) => {
+const EngagementLine = React.memo(({ startX, startY, target, cameraZoom }: { startX: number, startY: number, target: Track, cameraZoom: number }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!target.engagementTime || !target.interceptDuration) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [target.engagementTime, target.interceptDuration]);
+
+  if (!target.engagementTime || !target.interceptDuration) return null;
+  const timeElapsed = now - target.engagementTime;
+  const timeLeft = Math.max(0, target.interceptDuration - timeElapsed);
+  const ttiSecs = Math.ceil(timeLeft / 1000);
+
+  if (ttiSecs <= 0) return null;
+
+  return (
+    <g>
+      <line
+        x1={startX} y1={startY}
+        x2={target.x} y2={target.y}
+        stroke="#FF0033" strokeWidth={0.3 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`}
+        opacity="0.8"
+      />
+      <text
+        x={(startX + target.x) / 2}
+        y={(startY + target.y) / 2}
+        fill="#FF0033"
+        fontSize={1.5 / cameraZoom}
+        fontFamily="monospace"
+        fontWeight="bold"
+        className="drop-shadow-md"
+      >
+        TTI {ttiSecs}
+      </text>
+    </g>
+  );
+});
+
+const TTIDisplay = React.memo(({ track, color, cameraZoom }: { track: Track, color: string, cameraZoom: number }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!track.engagementTime || !track.interceptDuration) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [track.engagementTime, track.interceptDuration]);
+
   if (!track.engagementTime || !track.interceptDuration) return null;
   const tti = Math.max(0, Math.ceil((track.interceptDuration - (now - track.engagementTime)) / 1000));
+
+  if (tti <= 0) return null;
+
   return (
     <text 
       x={(BATTERY_POS.x + track.x) / 2} 
@@ -28,17 +82,16 @@ const TTIDisplay = React.memo(({ track, color, now, cameraZoom }: { track: Track
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, isHooked: boolean, now: number, cameraZoom: number, setHookedTrackId: (id: string) => void },
-  nextProps: { track: Track, isHooked: boolean, now: number, cameraZoom: number, setHookedTrackId: (id: string) => void }
+  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void },
+  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
-  if (nextProps.track.engagedBy && prevProps.now !== nextProps.now) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, isHooked, now, cameraZoom, setHookedTrackId }: { track: Track, isHooked: boolean, now: number, cameraZoom: number, setHookedTrackId: (id: string) => void }) => {
+const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, setHookedTrackId }: { track: Track, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }) => {
   if (track.detected === false) return null;
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
@@ -60,7 +113,7 @@ const TrackSymbol = React.memo(({ track, isHooked, now, cameraZoom, setHookedTra
             stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
             className="animate-pulse"
           />
-          <TTIDisplay track={track} color={color} now={now} cameraZoom={cameraZoom} />
+          <TTIDisplay track={track} color={color} cameraZoom={cameraZoom} />
         </g>
       )}
 
@@ -114,7 +167,7 @@ const TrackSymbol = React.memo(({ track, isHooked, now, cameraZoom, setHookedTra
       </g>
     </g>
   );
-});
+}, trackSymbolAreEqual);
 
 const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
   <>
@@ -233,6 +286,19 @@ const TrackSummaryTable = React.memo(({ tracks, hookedTrackId, setHookedTrackId 
       </div>
     </aside>
   );
+});
+
+const SystemClock = React.memo(() => {
+  const [time, setTime] = useState(() => new Date().toISOString().substring(11, 19) + 'Z');
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(new Date().toISOString().substring(11, 19) + 'Z');
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return <span className="text-[#00E5FF]">{time}</span>;
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
@@ -383,7 +449,6 @@ const Tote = React.memo(({ hookedTrack, masterWarning, vectoringTrackId, setVect
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [hookedTrackId, setHookedTrackId] = useState<string | null>(null);
-  const [systemTime, setSystemTime] = useState<string>('');
   const [logs, setLogs] = useState<SystemLog[]>([
     { id: 1, time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
@@ -392,8 +457,7 @@ export default function App() {
   const [inventory, setInventory] = useState({ pac3: 32, shorad: 24, thaad: 8 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
-  const [now, setNow] = useState(Date.now());
-  const [simTime, setSimTime] = useState(0);
+  const simTimeRef = useRef(0);
 
   // Camera State
   const [camera, setCamera] = useState({ x: 50, y: 50, zoom: 1 });
@@ -411,30 +475,13 @@ export default function App() {
     }
   }, [tracks, followedTrackId]);
 
-  const addLog = (message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
+  const addLog = useCallback((message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
     const now = new Date();
     const timeStr = now.toISOString().substring(11, 19) + 'Z';
     setLogs(prev => [{ id: Date.now(), time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
-  };
+  }, []);
 
   const unackAlerts = useMemo(() => logs.filter(l => !l.acknowledged), [logs]);
-
-  useEffect(() => {
-    const event = MISSION_STEPS.find(e => e.time === simTime);
-    if (event) {
-      setTracks(current => [...current, ...event.tracks]);
-      addLog(event.message, event.type);
-      
-      // Calculate enemy cost for this wave
-      const waveCost = event.tracks.reduce((acc, t) => {
-        if (t.category === 'UAS') return acc + 20000; // $20k per drone
-        if (t.category === 'CM') return acc + 1500000; // $1.5M per cruise missile
-        if (t.category === 'TBM') return acc + 3000000; // $3M per TBM
-        return acc;
-      }, 0);
-      setEnemyCost(prev => prev + waveCost);
-    }
-  }, [simTime]);
 
   const tracksRef = useRef(tracks);
   useEffect(() => {
@@ -443,10 +490,22 @@ export default function App() {
 
   useEffect(() => {
     const clockTimer = setInterval(() => {
-      const currentTime = new Date();
-      setNow(currentTime.getTime());
-      setSystemTime(currentTime.toISOString().substring(11, 19) + 'Z');
-      setSimTime(prev => prev + 1);
+      simTimeRef.current += 1;
+
+      const event = MISSION_STEPS.find(e => e.time === simTimeRef.current);
+      if (event) {
+        setTracks(current => [...current, ...event.tracks]);
+        addLog(event.message, event.type);
+
+        // Calculate enemy cost for this wave
+        const waveCost = event.tracks.reduce((acc, t) => {
+          if (t.category === 'UAS') return acc + 20000; // $20k per drone
+          if (t.category === 'CM') return acc + 1500000; // $1.5M per cruise missile
+          if (t.category === 'TBM') return acc + 3000000; // $3M per TBM
+          return acc;
+        }, 0);
+        setEnemyCost(prev => prev + waveCost);
+      }
     }, 1000);
 
     const sweepTimer = setInterval(() => {
@@ -646,41 +705,7 @@ export default function App() {
 
   // --- TACTICAL ACTIONS ---
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input (though we don't have any yet)
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      switch (e.key) {
-        case '1':
-          if (hookedTrack) setHookedTrackId(null);
-          break;
-        case '2':
-          if (hookedTrack && (hookedTrack.type === 'PENDING' || hookedTrack.type === 'UNKNOWN')) handleInterrogate();
-          break;
-        case '3':
-          if (hookedTrack && hookedTrack.type !== 'HOSTILE' && hookedTrack.type !== 'FRIEND') handleDeclare('HOSTILE');
-          break;
-        case '4':
-          if (hookedTrack && hookedTrack.type === 'HOSTILE' && hookedTrack.engagedBy === null) handleEngage('THAAD');
-          break;
-        case '5':
-          if (hookedTrack && hookedTrack.type === 'HOSTILE' && hookedTrack.engagedBy === null) handleEngage('PAC-3');
-          break;
-        case '6':
-          if (hookedTrack && hookedTrack.type === 'HOSTILE' && hookedTrack.engagedBy === null) handleEngage('SHORAD');
-          break;
-        case '7':
-          if (unackAlerts.length > 0) handleAckAlerts();
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hookedTrack, unackAlerts, inventory]); // Dependencies needed for handlers
-
-  const handleInterrogate = () => {
+  const handleInterrogate = useCallback(() => {
     if (!hookedTrack) return;
     addLog(`INTERROGATING TRK ${hookedTrack.id}...`, 'ACTION');
     setTimeout(() => {
@@ -689,16 +714,16 @@ export default function App() {
       if (isSweet) addLog(`TRK ${hookedTrack.id} IFF SWEET (MODE 3/C VALID)`, 'INFO');
       else addLog(`TRK ${hookedTrack.id} IFF SOUR (NO RESPONSE)`, 'WARN');
     }, 1500);
-  };
+  }, [hookedTrack]);
 
-  const handleDeclare = (newType: TrackType) => {
+  const handleDeclare = useCallback((newType: TrackType) => {
     if (!hookedTrack) return;
     const threatName = newType === 'HOSTILE' ? getThreatName(hookedTrack.category) : undefined;
     setTracks(currentTracks => currentTracks.map(t => t.id === hookedTrack.id ? { ...t, type: newType, threatName } : t));
     addLog(`TRK ${hookedTrack.id} DECLARED ${newType}`, newType === 'HOSTILE' ? 'ALERT' : 'WARN');
-  };
+  }, [hookedTrack]);
 
-  const handleEngage = (weapon: 'PAC-3' | 'SHORAD' | 'THAAD') => {
+  const handleEngage = useCallback((weapon: 'PAC-3' | 'SHORAD' | 'THAAD') => {
     if (!hookedTrack) return;
 
     const stats = WEAPON_STATS[weapon];
@@ -740,11 +765,123 @@ export default function App() {
       setHookedTrackId(currentId => currentId === hookedTrack.id ? null : currentId);
       addLog(`TRK ${hookedTrack.id} SPLASH. TARGET DESTROYED.`, 'INFO');
     }, interceptTime);
-  };
+  }, [hookedTrack, inventory]);
 
-  const handleAckAlerts = () => {
+  const handleAckAlerts = useCallback(() => {
     setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
-  };
+  }, []);
+
+  const hookedTrackRef = useRef(hookedTrack);
+  const unackAlertsRef = useRef(unackAlerts);
+  const inventoryRef = useRef(inventory);
+
+  useEffect(() => {
+    hookedTrackRef.current = hookedTrack;
+    unackAlertsRef.current = unackAlerts;
+    inventoryRef.current = inventory;
+  }, [hookedTrack, unackAlerts, inventory]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input (though we don't have any yet)
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const currentHooked = hookedTrackRef.current;
+      const currentUnack = unackAlertsRef.current;
+      const currentInv = inventoryRef.current;
+
+      switch (e.key) {
+        case '1':
+          if (currentHooked) setHookedTrackId(null);
+          break;
+        case '2':
+          if (currentHooked && (currentHooked.type === 'PENDING' || currentHooked.type === 'UNKNOWN')) {
+            // Need to directly inline the dispatch because handleInterrogate relies on stale state
+            addLog(`INTERROGATING TRK ${currentHooked.id}...`, 'ACTION');
+            setTimeout(() => {
+              const isSweet = currentHooked.spd > 250 && currentHooked.alt > 10000;
+              setTracks(currentTracks => currentTracks.map(t => t.id === currentHooked.id ? { ...t, iffInterrogated: true, type: isSweet ? 'ASSUMED_FRIEND' : 'UNKNOWN' } : t));
+              if (isSweet) addLog(`TRK ${currentHooked.id} IFF SWEET (MODE 3/C VALID)`, 'INFO');
+              else addLog(`TRK ${currentHooked.id} IFF SOUR (NO RESPONSE)`, 'WARN');
+            }, 1500);
+          }
+          break;
+        case '3':
+          if (currentHooked && currentHooked.type !== 'HOSTILE' && currentHooked.type !== 'FRIEND') {
+             const newType = 'HOSTILE';
+             const threatName = getThreatName(currentHooked.category);
+             setTracks(currentTracks => currentTracks.map(t => t.id === currentHooked.id ? { ...t, type: newType, threatName } : t));
+             addLog(`TRK ${currentHooked.id} DECLARED ${newType}`, 'ALERT');
+          }
+          break;
+        case '4':
+          if (currentHooked && currentHooked.type === 'HOSTILE' && currentHooked.engagedBy === null) {
+            handleEngageWeapon('THAAD', currentHooked, currentInv);
+          }
+          break;
+        case '5':
+          if (currentHooked && currentHooked.type === 'HOSTILE' && currentHooked.engagedBy === null) {
+            handleEngageWeapon('PAC-3', currentHooked, currentInv);
+          }
+          break;
+        case '6':
+          if (currentHooked && currentHooked.type === 'HOSTILE' && currentHooked.engagedBy === null) {
+            handleEngageWeapon('SHORAD', currentHooked, currentInv);
+          }
+          break;
+        case '7':
+          if (currentUnack.length > 0) {
+             setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
+          }
+          break;
+      }
+    };
+
+    const handleEngageWeapon = (weapon: 'PAC-3' | 'SHORAD' | 'THAAD', target: Track, currentInv: {pac3: number, shorad: number, thaad: number}) => {
+       const stats = WEAPON_STATS[weapon];
+       const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
+
+       if (rng > stats.range) {
+         addLog(`TRK ${target.id} OUT OF RANGE FOR ${weapon} (MAX ${stats.range}NM)`, 'ALERT');
+         return;
+       }
+
+       if (weapon === 'PAC-3' && currentInv.pac3 <= 0) {
+         addLog(`PAC-3 MAGAZINE DEPLETED. CANNOT ENGAGE.`, 'ALERT');
+         return;
+       }
+       if (weapon === 'SHORAD' && currentInv.shorad <= 0) {
+         addLog(`SHORAD MAGAZINE DEPLETED. CANNOT ENGAGE.`, 'ALERT');
+         return;
+       }
+
+       if (weapon === 'PAC-3') setInventory(prev => ({ ...prev, pac3: prev.pac3 - 1 }));
+       if (weapon === 'THAAD') setInventory(prev => ({ ...prev, thaad: prev.thaad - 1 }));
+       if (weapon === 'SHORAD') setInventory(prev => ({ ...prev, shorad: prev.shorad - 1 }));
+
+       setDefenseCost(prev => prev + stats.cost);
+
+       addLog(`BIRDS AWAY. ENGAGING TRK ${target.id} WITH ${weapon}`, 'ACTION');
+
+       const interceptTime = Math.max(3000, (rng / 2) * 1000);
+
+       setTracks(current => current.map(t => t.id === target.id ? {
+         ...t,
+         engagedBy: weapon,
+         engagementTime: Date.now(),
+         interceptDuration: interceptTime
+       } : t));
+
+       setTimeout(() => {
+         setTracks(current => current.filter(t => t.id !== target.id));
+         setHookedTrackId(currentId => currentId === target.id ? null : currentId);
+         addLog(`TRK ${target.id} SPLASH. TARGET DESTROYED.`, 'INFO');
+       }, interceptTime);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []); // Empty dependencies
 
   // --- RENDER HELPERS ---
 
@@ -801,30 +938,8 @@ export default function App() {
             const startX = shooter ? shooter.x : BATTERY_POS.x;
             const startY = shooter ? shooter.y : BATTERY_POS.y;
 
-            const timeElapsed = Date.now() - target.engagementTime!;
-            const timeLeft = Math.max(0, target.interceptDuration! - timeElapsed);
-            const ttiSecs = Math.ceil(timeLeft / 1000);
-
             return (
-              <g key={`engage-${target.id}`}>
-                <line 
-                  x1={startX} y1={startY} 
-                  x2={target.x} y2={target.y} 
-                  stroke="#FF0033" strokeWidth={0.3 / camera.zoom} strokeDasharray={`${0.5 / camera.zoom} ${0.5 / camera.zoom}`} 
-                  opacity="0.8"
-                />
-                <text 
-                  x={(startX + target.x) / 2} 
-                  y={(startY + target.y) / 2} 
-                  fill="#FF0033" 
-                  fontSize={1.5 / camera.zoom} 
-                  fontFamily="monospace" 
-                  fontWeight="bold"
-                  className="drop-shadow-md"
-                >
-                  TTI {ttiSecs}
-                </text>
-              </g>
+              <EngagementLine key={`engage-${target.id}`} startX={startX} startY={startY} target={target} cameraZoom={camera.zoom} />
             );
           })}
 
@@ -833,7 +948,6 @@ export default function App() {
               key={`track-group-${track.id}`} 
               track={track} 
               isHooked={track.id === hookedTrackId} 
-              now={now} 
               cameraZoom={camera.zoom}
               setHookedTrackId={setHookedTrackId} 
             />
@@ -868,7 +982,7 @@ export default function App() {
             </div>
           )}
           <span className="text-[#004466]">MGRS: <span ref={cursorRef} className="text-[#00E5FF]">40R DQ 0000 0000</span></span>
-          <span className="text-[#00E5FF]">ZULU: <span className="text-[#00E5FF]">{systemTime}</span></span>
+          <span className="text-[#00E5FF]">ZULU: <SystemClock /></span>
         </div>
       </header>
 
