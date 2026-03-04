@@ -50,7 +50,7 @@ const EngagementLine = React.memo(({ startX, startY, target, cameraZoom }: { sta
   );
 });
 
-const TTIDisplay = React.memo(({ track, color, cameraZoom }: { track: Track, color: string, cameraZoom: number }) => {
+const TTIDisplay = React.memo(({ startX, startY, track, color, cameraZoom }: { startX: number, startY: number, track: Track, color: string, cameraZoom: number }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -68,8 +68,8 @@ const TTIDisplay = React.memo(({ track, color, cameraZoom }: { track: Track, col
 
   return (
     <text 
-      x={(BATTERY_POS.x + track.x) / 2} 
-      y={(BATTERY_POS.y + track.y) / 2 - (1 / cameraZoom)} 
+      x={(startX + track.x) / 2}
+      y={(startY + track.y) / 2 - (1 / cameraZoom)}
       fill={color} 
       fontSize={0.8 / cameraZoom} 
       fontFamily="monospace" 
@@ -82,16 +82,17 @@ const TTIDisplay = React.memo(({ track, color, cameraZoom }: { track: Track, col
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void },
-  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }
+  prevProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void },
+  nextProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
+  if (prevProps.shooter !== nextProps.shooter) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, setHookedTrackId }: { track: Track, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }) => {
+const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, setHookedTrackId }: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, setHookedTrackId: (id: string) => void }) => {
   if (track.detected === false) return null;
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
@@ -102,18 +103,21 @@ const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, setHookedTrackId 
   // 2-minute velocity vector (Speed in knots / 60 mins * 2 mins)
   const vectorLength = (track.spd / 60) * 0.5; 
   
+  const startX = shooter ? shooter.x : BATTERY_POS.x;
+  const startY = shooter ? shooter.y : BATTERY_POS.y;
+
   return (
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
       {/* Pairing Line & TTI */}
       {track.engagedBy && (
         <g>
           <line 
-            x1={BATTERY_POS.x} y1={BATTERY_POS.y} 
+            x1={startX} y1={startY}
             x2={track.x} y2={track.y} 
             stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
             className="animate-pulse"
           />
-          <TTIDisplay track={track} color={color} cameraZoom={cameraZoom} />
+          <TTIDisplay startX={startX} startY={startY} track={track} color={color} cameraZoom={cameraZoom} />
         </g>
       )}
 
@@ -539,9 +543,9 @@ export default function App() {
               
               const turnRate = Math.max(-15, Math.min(15, hdgDiff));
               newHdg = (newHdg + turnRate + 360) % 360;
-            } else {
-              // Reached waypoint, clear it or orbit
-              // For now, just keep flying current heading
+            } else if (!track.isRTB) {
+              // Reached waypoint and not RTB -> Orbit (turn right slowly)
+              newHdg = (newHdg + 10) % 360;
             }
           }
 
@@ -569,16 +573,21 @@ export default function App() {
         // Fighter Auto-Engagement Logic
         const fighters = nextTracks.filter(t => t.isFighter && (t.missilesRemaining || 0) > 0);
         const hostiles = nextTracks.filter(t => t.type === 'HOSTILE' && !t.engagedBy && (t.category === 'UAS' || t.category === 'CM' || t.category === 'FW'));
+        const targetedHostileIds = new Set<string>();
 
         fighters.forEach(fighter => {
           if ((fighter.missilesRemaining || 0) <= 0) return;
+          if (fighter.isRTB) return;
           
-          // Find closest unengaged hostile within 15 NM
-          let closestHostile = null;
-          let minRange = 15;
+          // Radar/Datalink range for targeting
+          const MAX_DETECT_RANGE = 50;
+          const WEAPON_RANGE = 15;
+
+          let closestHostile: Track | null = null;
+          let minRange = MAX_DETECT_RANGE;
 
           for (const hostile of hostiles) {
-            if (hostile.engagedBy) continue;
+            if (hostile.engagedBy || targetedHostileIds.has(hostile.id)) continue;
             const range = calculateRange(fighter.x, fighter.y, hostile.x, hostile.y);
             if (range < minRange) {
               minRange = range;
@@ -587,21 +596,32 @@ export default function App() {
           }
 
           if (closestHostile) {
-            closestHostile.engagedBy = fighter.id;
-            closestHostile.engagementTime = Date.now();
-            closestHostile.interceptDuration = minRange * 1000; // 1 second per NM for AAM
-            fighter.missilesRemaining = (fighter.missilesRemaining || 0) - 1;
+            targetedHostileIds.add(closestHostile.id);
             
-            // Safe to trigger side effects here because we are outside the React state updater
-            addLog(`${fighter.id} ENGAGING TRK ${closestHostile.id} (FOX-3). MISSILES REMAINING: ${fighter.missilesRemaining}`, 'ACTION');
-            setDefenseCost(prev => prev + 1200000); // $1.2M per AMRAAM
+            if (minRange <= WEAPON_RANGE) {
+              // Within range, FIRE!
+              closestHostile.engagedBy = fighter.id;
+              closestHostile.engagementTime = Date.now();
+              closestHostile.interceptDuration = minRange * 1000; // 1 second per NM for AAM
+              fighter.missilesRemaining = (fighter.missilesRemaining || 0) - 1;
 
-            // Schedule target destruction
-            setTimeout(() => {
-              setTracks(current => current.filter(t => t.id !== closestHostile.id));
-              setHookedTrackId(currentId => currentId === closestHostile.id ? null : currentId);
-              addLog(`TRK ${closestHostile.id} SPLASH. TARGET DESTROYED BY ${fighter.id}.`, 'INFO');
-            }, minRange * 1000);
+              // Safe to trigger side effects here because we are outside the React state updater
+              addLog(`${fighter.id} ENGAGING TRK ${closestHostile.id} (FOX-3). MISSILES REMAINING: ${fighter.missilesRemaining}`, 'ACTION');
+              setDefenseCost(prev => prev + 1200000); // $1.2M per AMRAAM
+
+              // Crank away from target slightly after firing (e.g. 60 deg offset)
+              fighter.hdg = (fighter.hdg + 60) % 360;
+
+              // Schedule target destruction
+              setTimeout(() => {
+                setTracks(current => current.filter(t => t.id !== closestHostile.id));
+                setHookedTrackId(currentId => currentId === closestHostile.id ? null : currentId);
+                addLog(`TRK ${closestHostile.id} SPLASH. TARGET DESTROYED BY ${fighter.id}.`, 'INFO');
+              }, minRange * 1000);
+            } else {
+              // Not in range yet, vector towards target
+              fighter.targetWaypoint = { x: closestHostile.x, y: closestHostile.y };
+            }
           }
         });
 
@@ -943,15 +963,19 @@ export default function App() {
             );
           })}
 
-          {tracks.map(track => (
-            <TrackSymbol 
-              key={`track-group-${track.id}`} 
-              track={track} 
-              isHooked={track.id === hookedTrackId} 
-              cameraZoom={camera.zoom}
-              setHookedTrackId={setHookedTrackId} 
-            />
-          ))}
+          {tracks.map(track => {
+            const shooter = track.engagedBy ? tracks.find(t => t.id === track.engagedBy) : undefined;
+            return (
+              <TrackSymbol
+                key={`track-group-${track.id}`}
+                track={track}
+                shooter={shooter}
+                isHooked={track.id === hookedTrackId}
+                cameraZoom={camera.zoom}
+                setHookedTrackId={setHookedTrackId}
+              />
+            );
+          })}
         </svg>
       </div>
 
