@@ -18,6 +18,9 @@ export const processFighters = (
   now: number
 ): Track[] => {
   
+  // Create a fast O(1) lookup map to prevent O(N) searches inside the loops
+  const trackMap = new Map(tracks.map(t => [t.id, t]));
+
   // 1. Pre-process the battlespace for the fighters
   const hostiles = tracks.filter(t => t.type === 'HOSTILE' && (!t.interceptors || t.interceptors.length < 2));
   const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
@@ -32,7 +35,7 @@ export const processFighters = (
     // 2. Visual ID Logic (VID) - Fighter identifies unknowns at close range
     unknowns.forEach(u => {
       if (calculateRange(track.x, track.y, u.x, u.y) < 3.0) {
-        const uInNext = tracks.find(t => t.id === u.id);
+        const uInNext = trackMap.get(u.id); // O(1) lookup
         if (uInNext && !uInNext.iffInterrogated) {
           const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
           const threatType = uInNext.id === 'FLT-EK404' ? 'SUSPECT' : 'HOSTILE';
@@ -47,7 +50,7 @@ export const processFighters = (
 
     // 3. Cranking Maintenance (Post-Launch Support)
     if (track.crankingTargetId) {
-      const crankTarget = tracks.find(t => t.id === track.crankingTargetId);
+      const crankTarget = trackMap.get(track.crankingTargetId); // O(1) lookup
       
       // Check if we still need to support the missile
       const isMissileActive = crankTarget?.interceptors?.some(i => i.shooterId === track.id);
@@ -122,7 +125,7 @@ export const processFighters = (
 
         // Note: The actual interceptor injection happens in App.tsx to avoid mutating state deeply here,
         // but for now we'll mutate the incoming array as it's a draft array in the sweepTimer.
-        const targetInNext = tracks.find(t => t.id === targetId);
+        const targetInNext = trackMap.get(targetId); // O(1) lookup
         if (targetInNext) {
           targetInNext.interceptors = targetInNext.interceptors || [];
           targetInNext.interceptors.push({
