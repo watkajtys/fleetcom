@@ -1,5 +1,5 @@
 import { Track, TrackCategory } from './types';
-import { calculateRange, calculateBearing, calculateClosureRate, getThreatName } from './utils';
+import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint, calculateCrankWaypoint } from './utils';
 
 // We need to know where the battery/assets are to determine if a low-value target is a threat
 import { BATTERY_POS } from './constants';
@@ -45,7 +45,24 @@ export const processFighters = (
       }
     });
 
-    // 3. Engagement Logic
+    // 3. Cranking Maintenance (Post-Launch Support)
+    if (track.crankingTargetId) {
+      const crankTarget = tracks.find(t => t.id === track.crankingTargetId);
+      
+      // Check if we still need to support the missile
+      const isMissileActive = crankTarget?.interceptors?.some(i => i.shooterId === track.id);
+      
+      if (crankTarget && isMissileActive) {
+        // Continue the crank (keep setting the waypoint far out on the offset heading)
+        const crankWaypoint = calculateCrankWaypoint(track, crankTarget);
+        return { ...track, targetWaypoint: crankWaypoint };
+      } else {
+        // Target destroyed, missed, or lost. Clear crank state and return to patrol
+        return { ...track, crankingTargetId: null, targetWaypoint: null };
+      }
+    }
+
+    // 4. Engagement Logic
     if ((track.missilesRemaining || 0) <= 0) return track;
 
     const MAX_DETECT_RANGE = 50;
@@ -100,7 +117,7 @@ export const processFighters = (
         const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
         const interceptTimeMs = interceptTimeSecs * 1000;
 
-        events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
+        events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}. Cranking.`, logType: 'ACTION' });
         events.push({ type: 'COST', amount: 1200000 });
 
         // Note: The actual interceptor injection happens in App.tsx to avoid mutating state deeply here,
@@ -119,14 +136,25 @@ export const processFighters = (
           });
         }
 
-        // The classic 60-degree break after firing
-        return { ...track, missilesRemaining: track.missilesRemaining! - 1, hdg: (track.hdg + 60) % 360, targetWaypoint: null };
+        // Initiate Crank Maneuver
+        const crankWaypoint = calculateCrankWaypoint(track, bestTarget);
+        
+        return { 
+          ...track, 
+          missilesRemaining: track.missilesRemaining! - 1, 
+          crankingTargetId: targetId,
+          targetWaypoint: crankWaypoint
+        };
       } else {
-        // Intercept logic (Flying towards the target)
-        if (!track.targetWaypoint || track.targetWaypoint.x !== bestTarget.x) {
+        // Intercept logic (Lead Pursuit)
+        if (!track.targetWaypoint || calculateRange(track.targetWaypoint.x, track.targetWaypoint.y, bestTarget.x, bestTarget.y) > 2) {
           events.push({ type: 'LOG', message: `${track.id}: Intercepting TRACK ${bestTarget.id}.`, logType: 'INFO' });
         }
-        return { ...track, targetWaypoint: { x: bestTarget.x, y: bestTarget.y } };
+        
+        // Assume maximum intercept speed (1100 knots) for lead calculation
+        const leadPoint = calculateLeadInterceptPoint({x: track.x, y: track.y, spd: 1100}, bestTarget);
+        
+        return { ...track, targetWaypoint: leadPoint };
       }
     }
     
