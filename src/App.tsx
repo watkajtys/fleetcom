@@ -103,16 +103,21 @@ const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime }: 
 
   return (
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
-      {/* Pairing Lines (Shooter to Target) */}
-      {track.interceptors && track.interceptors.map((interceptor) => (
-        <line 
-          key={`line-${interceptor.id}`}
-          x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
-          x2={smoothX} y2={smoothY} 
-          stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
-          className="animate-pulse"
-        />
-      ))}
+      {/* Pairing Lines (Shooter to Target) - Show briefly on launch, or always if track is hooked */}
+      {track.interceptors && track.interceptors.map((interceptor) => {
+        const age = now - interceptor.engagementTime;
+        if (age > 1500 && !isHooked) return null;
+        
+        return (
+          <line 
+            key={`line-${interceptor.id}`}
+            x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
+            x2={smoothX} y2={smoothY} 
+            stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
+            className="animate-pulse"
+          />
+        );
+      })}
 
       {/* Missile Vectors & TTI */}
       {track.interceptors && track.interceptors.map((interceptor) => (
@@ -551,6 +556,8 @@ export default function App() {
       const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
 
       setTracks(currentTracks => {
+        events.length = 0; // Clear events to prevent duplicates in React Strict Mode double-invocations
+
         // 1. Progress intercepts and identify splashes/misses
         let nextTracks = currentTracks.map(t => {
           if (t.interceptors && t.interceptors.length > 0) {
