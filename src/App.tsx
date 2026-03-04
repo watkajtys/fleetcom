@@ -97,8 +97,9 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom }: { trac
   if (track.type === 'NEUTRAL') color = '#00FF00'; // Pure Green
   if (track.type === 'SUSPECT') color = '#FF8800'; // Orange
 
-  // 2-minute velocity vector (Speed in knots / 60 mins * 2 mins)
-  const vectorLength = (track.spd / 60) * 0.5; 
+  // Logarithmic velocity vector to handle wide speed range (100kts to 4000kts)
+  // Ensures slow drones have visible leaders while TBMs don't shoot off screen
+  const vectorLength = 2.0 * Math.log10(track.spd / 10 + 1); 
   
   const startX = shooter ? shooter.x : BATTERY_POS.x;
   const startY = shooter ? shooter.y : BATTERY_POS.y;
