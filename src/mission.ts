@@ -100,7 +100,7 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 20,
-    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT (VIPER 01 & 02). SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404. BUSTER.',
+    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT (VIPER 01 & 02). SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404.',
     type: 'ACTION',
     generateTracks: () => [
       { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-01', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} },
