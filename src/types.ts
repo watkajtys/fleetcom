@@ -14,12 +14,17 @@ export interface Track {
   iffInterrogated: boolean;
   tq: number; // Track Quality 1-9
   coasting: boolean; // True if radar temporarily lost lock
-  engagedBy: 'PAC-3' | 'SHORAD' | 'THAAD' | null;
+  engagedBy: 'PAC-3' | 'SHORAD' | 'THAAD' | 'VIPER' | string | null;
   engagementTime?: number;
   interceptDuration?: number;
   sensor: 'LCL' | 'L16' | 'FUS';
   threatName?: string;
   detected?: boolean;
+  // Fighter specific properties
+  isFighter?: boolean;
+  isRTB?: boolean;
+  missilesRemaining?: number;
+  targetWaypoint?: {x: number, y: number} | null;
 }
 
 export interface SystemLog {

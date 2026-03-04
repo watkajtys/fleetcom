@@ -31,6 +31,10 @@ export const createTargetTrack = (
   if (category === 'CM') prefix = 'C';
   if (category === 'TBM') prefix = 'B';
 
+  const rangeToBattery = distanceNm;
+  const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(alt));
+  const isDetected = sensor === 'L16' || rangeToBattery <= radarHorizonNm;
+
   return {
     id: generateId(prefix),
     type,
@@ -45,7 +49,8 @@ export const createTargetTrack = (
     tq: category === 'UAS' || category === 'CM' ? Math.floor(Math.random() * 3) + 2 : 9,
     coasting: false,
     engagedBy: null,
-    sensor
+    sensor,
+    detected: isDetected
   };
 };
 
@@ -72,7 +77,8 @@ export const createCrossingTrack = (
     tq: 9,
     coasting: false,
     engagedBy: null,
-    sensor: 'L16'
+    sensor: 'L16',
+    detected: true
   };
 };
 
@@ -85,53 +91,104 @@ export interface MissionEvent {
 
 export const MISSION_STEPS: MissionEvent[] = [
   {
-    time: 5,
-    message: 'INTEL: EXPECTED UAS SWARM LAUNCH DETECTED FROM COASTAL REGION.',
+    time: 10,
+    message: 'ATC: TRACK 101 SQUAWKING 7500. DEVIATING FROM ASSIGNED FLIGHT PATH. INTENTIONS UNKNOWN.',
     type: 'WARN',
     tracks: [
-      // 20 UAS tracks, 35-40 NM away (beyond radar horizon for 200ft)
-      ...Array.from({length: 20}).map(() => createTargetTrack(
-        'PENDING', 'UAS', 
-        300 + Math.random() * 120, 
-        35 + Math.random() * 5,    
-        100 + Math.random() * 15,  
-        200, // 200 ft altitude makes them invisible until ~30 NM
-        'LCL'
-      )),
-      // 2 Commercial flights crossing
-      createCrossingTrack('ASSUMED_FRIEND', 'FW', 10, 50, 90, 450, 35000),
-      createCrossingTrack('ASSUMED_FRIEND', 'FW', 80, 20, 270, 420, 33000),
+      // The deviator. Heading 120 points from (10,10) towards Burj Khalifa (60,40)
+      createCrossingTrack('UNKNOWN', 'FW', 10, 10, 120, 500, 31000)
     ]
   },
   {
-    time: 180, // 3 mins
-    message: 'WARNING: FAST MOVERS DETECTED LOW ALTITUDE. POSSIBLE LACM.',
+    time: 20,
+    message: 'THIS IS HUNTRESS WITH AN ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT. SCRAMBLE IMMEDIATELY. VECTOR 320, BUSTER.',
+    type: 'INFO',
+    tracks: [
+      // VIPER-01 launching from Al Minhad (65, 65). Starts low and slow, will accelerate/climb.
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-01', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} }
+    ]
+  },
+  {
+    time: 24,
+    message: 'INFO: VIPER-02 AIRBORNE.',
+    type: 'INFO',
+    tracks: [
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'VIPER-02', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 45, y: 40} }
+    ]
+  },
+  {
+    time: 28,
+    message: 'INFO: VIPER-03 AIRBORNE.',
+    type: 'INFO',
+    tracks: [
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-03', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} }
+    ]
+  },
+  {
+    time: 32,
+    message: 'INFO: VIPER-04 AIRBORNE.',
+    type: 'INFO',
+    tracks: [
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'VIPER-04', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
+    ]
+  },
+  {
+    time: 60,
+    message: 'WARNING RED. MULTIPLE BOGEYS DETECTED. EVALUATED HOSTILE UAS SWARM. WEAPONS FREE.',
     type: 'ALERT',
     tracks: [
-      // 8 CMs, 45-50 NM away (beyond radar horizon for 500ft)
-      ...Array.from({length: 8}).map(() => createTargetTrack(
-        'PENDING', 'CM', 
-        340 + Math.random() * 40, 
-        45 + Math.random() * 5, 
-        450 + Math.random() * 50, 
-        500, // 500 ft altitude makes them invisible until ~40 NM
+      // 24x Shahed-136 from Iran (North/NW). Low altitude, slow speed.
+      // Enough to be a serious threat and drain magazines if engaged improperly, but not 120.
+      ...Array.from({length: 24}).map(() => createTargetTrack(
+        'PENDING', 'UAS', 
+        315 + Math.random() * 30, // Bearing 315-345
+        75 + Math.random() * 10,  // 75-85 NM away
+        110 + Math.random() * 20, // 110-130 knots
+        200 + Math.random() * 300, // 200-500 ft altitude
         'LCL'
       ))
     ]
   },
   {
-    time: 330, // 5.5 mins
-    message: 'VAMPIRE VAMPIRE VAMPIRE. TACTICAL BALLISTIC MISSILES INBOUND.',
+    time: 140,
+    message: 'WARNING RED. MULTIPLE FAST MOVERS DETECTED. EVALUATED HOSTILE CRUISE MISSILES. TERRAIN MASKING INDICATED.',
     type: 'ALERT',
     tracks: [
-      // 6 TBMs, 100 NM away, high altitude (visible immediately)
+      // 8x Quds-2 LACMs sneaking through the mountains
+      // Delayed to arrive while fighters are busy with the UAS swarm
+      ...Array.from({length: 8}).map(() => createTargetTrack(
+        'PENDING', 'CM', 
+        60 + Math.random() * 40, // Bearing 060-100 (East)
+        65 + Math.random() * 5,  // 65-70 NM away
+        450 + Math.random() * 30, // 450-480 knots
+        300 + Math.random() * 200, // 300-500 ft altitude
+        'LCL'
+      ))
+    ]
+  },
+  {
+    time: 220,
+    message: 'ALARM RED. SCUD LAUNCHES DETECTED. INBOUND DUBAI. CRITERIA MET. WEAPONS FREE.',
+    type: 'ALERT',
+    tracks: [
+      // 6x MRBMs from Iran (North)
+      // The knockout blow, arriving when defenses are stressed
       ...Array.from({length: 6}).map(() => createTargetTrack(
         'PENDING', 'TBM', 
-        350 + Math.random() * 20, 
-        95 + Math.random() * 5, 
-        3500 + Math.random() * 500, 
-        150000, 
-        'L16'
+        340 + Math.random() * 20, // Bearing 340-360
+        85 + Math.random() * 5,   // 85 NM away
+        4000 + Math.random() * 500, // Mach 6+
+        200000 + Math.random() * 50000, // 200k+ ft
+        'L16' 
+      )),
+      // 4x MRBMs from Yemen (South/SW)
+      ...Array.from({length: 4}).map(() => createTargetTrack(
+        'PENDING', 'TBM', 
+        180 + Math.random() * 40, // Bearing 180-220
+        85 + Math.random() * 5,   // 85 NM away
+        4000 + Math.random() * 500, // Mach 6+
+        200000 + Math.random() * 50000, // 200k+ ft
+        'L16' 
       ))
     ]
   }
