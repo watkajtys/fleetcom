@@ -100,11 +100,11 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 20,
-    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 01 FLIGHT (VIPER 01 & 02). SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404.',
+    message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR VIPER 21 FLIGHT (VIPER 21 & 22). SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404.',
     type: 'ACTION',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-01', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} },
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'VIPER-02', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 45, y: 40} }
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'VIPER-21', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} },
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'VIPER-22', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 45, y: 40} }
     ]
   },
   {
@@ -145,11 +145,11 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 130,
-    message: 'HUNTRESS: SCRAMBLE VIPER 03 FLIGHT (VIPER 03 & 04) TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
+    message: 'HUNTRESS: SCRAMBLE VIPER 23 FLIGHT (VIPER 23 & 24) TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
     type: 'ACTION',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-03', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} },
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'VIPER-04', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'VIPER-23', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} },
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'VIPER-24', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
     ]
   }
 ];
