@@ -24,6 +24,20 @@
       radial-gradient(circle at center, transparent 49.5%, rgba(30, 58, 138, 0.6) 50%, transparent 50.5%),
       radial-gradient(circle at center, transparent 24.5%, rgba(30, 58, 138, 0.6) 25%, transparent 25.5%);
   }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 26, 38, 0.5);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 229, 255, 0.3);
+    border-radius: 2px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 229, 255, 0.6);
+  }
 }
 
 @keyframes spin {

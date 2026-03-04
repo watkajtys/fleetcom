@@ -10,15 +10,7 @@ import { getThreatName, calculateRange, calculateBearing, calculateKinematics, c
 import { MISSION_STEPS } from './mission';
 import { processFighters } from './ai';
 
-const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (!interceptor.engagementTime || !interceptor.interceptDuration) return;
-    const interval = setInterval(() => setNow(Date.now()), 50);
-    return () => clearInterval(interval);
-  }, [interceptor.engagementTime, interceptor.interceptDuration]);
-
+const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime, now }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number, now: number }) => {
   if (!interceptor.engagementTime || !interceptor.interceptDuration || interceptor.interceptTtl === undefined) return null;
   
   // 1. Calculate continuous progress based on original launch time
@@ -67,25 +59,18 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastS
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
-  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
+  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number, now: number },
+  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number, now: number }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
   if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
+  if (prevProps.now !== nextProps.now) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime }: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (track.detected === false) return;
-    const interval = setInterval(() => setNow(Date.now()), 50);
-    return () => clearInterval(interval);
-  }, [track.detected]);
-
+const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime, now }: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number, now: number }) => {
   if (track.detected === false) return null;
 
   const elapsed = (now - lastSweepTime) / 1000;
@@ -122,7 +107,7 @@ const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime }: 
 
       {/* Missile Vectors & TTI */}
       {track.interceptors && track.interceptors.map((interceptor) => (
-        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} />
+        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} now={now} />
       ))}
 
       {/* Track History Breadcrumbs */}
@@ -254,7 +239,7 @@ const TrackSummaryTable = React.memo(({ tracks, hookedTrackIds, setHookedTrackId
         <span className="text-[#00E5FF] font-bold">[TRK]</span>
         <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest">TRACK SUMMARY</h2>
       </div>
-      <div className="flex-1 overflow-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex-1 overflow-auto custom-scrollbar">
         <table className="w-full text-[10px] text-left">
           <thead className="text-[#004466] sticky top-0 bg-[#00050A]/50 border-b border-[#002B40] backdrop-blur-md">
             <tr>
@@ -322,7 +307,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
         <span className="text-[#00E5FF] font-bold">[LOG]</span>
         <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest">SYSTEM EVENT LOG</h2>
       </div>
-      <div className="flex-1 overflow-auto p-3 space-y-1.5 flex flex-col-reverse [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex-1 overflow-auto p-3 space-y-1.5 flex flex-col-reverse custom-scrollbar">
         {logs.map((log) => (
           <div key={log.id} className={`text-[10px] flex gap-3 ${!log.acknowledged ? 'bg-[#FF0033]/20 border border-[#FF0033] p-1' : ''}`}>
             <span className="text-[#004466] shrink-0">{log.time}</span>
@@ -490,6 +475,18 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [lastSweepTime, setLastSweepTime] = useState(Date.now());
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    let animationFrameId: number;
+    const tick = () => {
+      setNow(Date.now());
+      animationFrameId = requestAnimationFrame(tick);
+    };
+    animationFrameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
     { id: 1, time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
@@ -1065,18 +1062,18 @@ export default function App() {
             </g>
           ))}
 
-          {tracks.map(track => {
-            return (
-              <TrackSymbol
-                key={`track-group-${track.id}`}
-                track={track}
-                isHooked={hookedTrackIds.includes(track.id)}
-                cameraZoom={camera.zoom}
-                lastSweepTime={lastSweepTime}
-              />
-            );
-          })}
-
+                    {tracks.map(track => {
+                      return (
+                        <TrackSymbol 
+                          key={`track-group-${track.id}`} 
+                          track={track} 
+                          isHooked={hookedTrackIds.includes(track.id)} 
+                          cameraZoom={camera.zoom} 
+                          lastSweepTime={lastSweepTime} 
+                          now={now}
+                        />
+                      );
+                    })}
           {/* Render Marquee Selection Box */}
           {selectionBox && (
             <rect
