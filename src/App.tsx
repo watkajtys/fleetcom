@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Track, TrackType, SystemLog } from './types';
 import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSETS } from './constants';
-import { getThreatName, calculateRange, calculateBearing, calculateKinematics } from './utils';
+import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate } from './utils';
 import { MISSION_STEPS } from './mission';
 
 const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, color: string, cameraZoom: number }) => {
@@ -20,7 +20,6 @@ const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, 
 
   if (!track.engagementTime || !track.interceptDuration || track.interceptTtl === undefined) return null;
   
-  // Use logical interceptTtl as the primary timer to stay in sync with the sweep
   const elapsedSinceLastSweep = (now % 3000) / 1000;
   const smoothTti = Math.max(0, track.interceptTtl - elapsedSinceLastSweep);
   const totalDuration = track.interceptDuration / 1000;
@@ -31,11 +30,15 @@ const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, 
   const startX = track.launchPos ? track.launchPos.x : BATTERY_POS.x;
   const startY = track.launchPos ? track.launchPos.y : BATTERY_POS.y;
 
-  const missileX = startX + (track.x - startX) * progress;
-  const missileY = startY + (track.y - startY) * progress;
+  // Lead Pursuit: Aim at where the target will be at impact
+  const targetLeadX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
+  const targetLeadY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
 
-  const dx = track.x - missileX;
-  const dy = track.y - missileY;
+  const missileX = startX + (targetLeadX - startX) * progress;
+  const missileY = startY + (targetLeadY - startY) * progress;
+
+  const dx = targetLeadX - missileX;
+  const dy = targetLeadY - missileY;
   const dist = Math.sqrt(dx * dx + dy * dy);
   const leadX = dist > 0 ? missileX + (dx / dist) * Math.min(2.0, dist) : missileX;
   const leadY = dist > 0 ? missileY + (dy / dist) * Math.min(2.0, dist) : missileY;
@@ -656,13 +659,11 @@ export default function App() {
               const targetId = closestHostile.id;
               const fighterId = track.id;
               
-              // Closure rate for Fighter AAM (Missile Speed + Fighter Speed + Target Speed)
+              // Closure rate for Fighter AAM (Missile Speed + Aspect-Corrected Target Speed)
               const missileSpdNmSec = 1.0; // Mach 4.5
-              const fighterSpdNmSec = track.spd / 3600;
-              const targetSpdNmSec = closestHostile.spd / 3600;
-              const closureRate = missileSpdNmSec + fighterSpdNmSec + targetSpdNmSec;
+              const closureRate = calculateClosureRate({x: track.x, y: track.y}, closestHostile, missileSpdNmSec);
               
-              const interceptTimeSecs = minRange / closureRate;
+              const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
               const interceptTimeMs = interceptTimeSecs * 1000;
 
               events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
@@ -961,12 +962,10 @@ export default function App() {
         setDefenseCost(prev => prev + stats.cost);
         addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
         
-        const targetSpdNmSec = target.spd / 3600;
         const missileSpdNmSec = weapon === "THAAD" ? 1.5 : 0.7; // Mach 8 vs Mach 4
+        const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
         
-        // Closure rate calculation (simplistic head-on assumption for SAMs)
-        const closureRate = missileSpdNmSec + targetSpdNmSec;
-        const interceptTimeSecs = rng / closureRate;
+        const interceptTimeSecs = rng / Math.max(0.1, closureRate);
         const interceptTimeMs = interceptTimeSecs * 1000;
 
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
