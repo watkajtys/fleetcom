@@ -614,7 +614,7 @@ export default function App() {
             }
           }
 
-          const speedFactor = (newSpd / 1200) * 3; 
+          const speedFactor = newSpd / 1200; 
           const rad = newHdg * (Math.PI / 180);
           let newX = track.x + Math.sin(rad) * speedFactor;
           let newY = track.y - Math.cos(rad) * speedFactor;
@@ -976,7 +976,7 @@ export default function App() {
         setDefenseCost(prev => prev + stats.cost);
         addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
         
-        const interceptTime = Math.max(3000, (rng / 2) * 1000);
+        const interceptTime = Math.max(3000, (rng / (weapon === "THAAD" ? 1.5 : 0.7)) * 1000); 
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
 
         setTracks(current => current.map(t => t.id === id ? { 
