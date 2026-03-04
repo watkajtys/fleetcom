@@ -20,24 +20,30 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastS
 
   if (!interceptor.engagementTime || !interceptor.interceptDuration || interceptor.interceptTtl === undefined) return null;
   
+  // 1. Calculate continuous progress based on original launch time
+  const elapsedSinceLaunch = now - interceptor.engagementTime;
+  const progress = Math.min(1, Math.max(0, elapsedSinceLaunch / interceptor.interceptDuration));
+
+  // 2. Smooth TTI for the text display
   const elapsedSinceLastSweep = (now - lastSweepTime) / 1000;
   const smoothTti = Math.max(0, interceptor.interceptTtl - elapsedSinceLastSweep);
-  const totalDuration = interceptor.interceptDuration / 1000;
-  const progress = Math.min(1, 1 - (smoothTti / totalDuration));
 
-  if (progress >= 1 || smoothTti <= 0) return null;
+  if (progress >= 1) return null;
 
   const startX = interceptor.launchPos.x;
   const startY = interceptor.launchPos.y;
 
-  // Predict where the target is RIGHT NOW (Interpolated)
+  // 3. Predict where the target is RIGHT NOW (Interpolated)
   const currentTargetX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
   const currentTargetY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
 
-  // Predict where the target WILL BE at impact (Lead Point)
-  const targetLeadX = currentTargetX + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
-  const targetLeadY = currentTargetY - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
+  // 4. Predict where the target WILL BE at impact (Lead Point)
+  // Use the remaining duration rather than smoothTti to ensure the lead point stays stable
+  const remainingSecs = (interceptor.interceptDuration - elapsedSinceLaunch) / 1000;
+  const targetLeadX = currentTargetX + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * remainingSecs);
+  const targetLeadY = currentTargetY - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * remainingSecs);
 
+  // 5. Interpolate missile position along the stable track to the lead point
   const missileX = startX + (targetLeadX - startX) * progress;
   const missileY = startY + (targetLeadY - startY) * progress;
 
