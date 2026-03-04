@@ -8,6 +8,7 @@ import { Track, TrackType, SystemLog } from './types';
 import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSETS } from './constants';
 import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate } from './utils';
 import { MISSION_STEPS } from './mission';
+import { processFighters } from './ai';
 
 const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
   const [now, setNow] = useState(Date.now());
@@ -667,97 +668,8 @@ export default function App() {
           return { ...track, x: newX, y: newY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint };
         });
 
-        // 3. Fighter VID and Auto-Engagement
-        const hostiles = nextTracks.filter(t => t.type === 'HOSTILE' && (!t.interceptors || t.interceptors.length < 2) && (t.category === 'UAS' || t.category === 'CM' || t.category === 'FW'));
-        const unknowns = nextTracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
-        const targetedHostileIds = new Set<string>();
-
-        nextTracks = nextTracks.map(track => {
-          if (!track.isFighter || track.isRTB) return track;
-
-          // Visual ID Logic (VID)
-          unknowns.forEach(u => {
-            if (calculateRange(track.x, track.y, u.x, u.y) < 3.0) {
-              const uInNext = nextTracks.find(t => t.id === u.id);
-              if (uInNext && !uInNext.iffInterrogated) {
-                const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
-                const threatType = uInNext.id === 'FLT-EK404' ? 'SUSPECT' : 'HOSTILE';
-                uInNext.iffInterrogated = true;
-                // Hardening: Preserve manual HOSTILE status
-                if (uInNext.type !== 'HOSTILE') uInNext.type = threatType;
-                uInNext.threatName = threatName;
-                events.push({ type: 'LOG', message: `${track.id}: TRACK ${u.id} VID ${threatName}.`, logType: 'ALERT' });
-              }
-            }
-          });
-
-          if ((track.missilesRemaining || 0) <= 0) return track;
-          
-          const MAX_DETECT_RANGE = 50;
-          const WEAPON_RANGE = 18;
-          
-          // If fighter has a manual waypoint, only auto-engage if target is within WEAPON_RANGE (Immediate threat)
-          // Otherwise, auto-hunt within MAX_DETECT_RANGE
-          const searchRange = track.targetWaypoint ? WEAPON_RANGE : MAX_DETECT_RANGE;
-
-          let closestHostile: Track | null = null;
-          let minRange = searchRange;
-
-          for (const hostile of hostiles) {
-            // Re-check interceptor count since other fighters may have just targeted it in this sweep
-            if ((hostile.interceptors && hostile.interceptors.length >= 2) || targetedHostileIds.has(hostile.id)) continue;
-            const range = calculateRange(track.x, track.y, hostile.x, hostile.y);
-            if (range < minRange) {
-              minRange = range;
-              closestHostile = hostile;
-            }
-          }
-
-          if (closestHostile) {
-            targetedHostileIds.add(closestHostile.id);
-            const bearingToTarget = calculateBearing(track.x, track.y, closestHostile.x, closestHostile.y);
-            let aspectDiff = Math.abs(track.hdg - bearingToTarget);
-            if (aspectDiff > 180) aspectDiff = 360 - aspectDiff;
-
-            if (minRange <= WEAPON_RANGE && aspectDiff <= 45) {
-              const targetId = closestHostile.id;
-              const fighterId = track.id;
-              
-              // Closure rate for Fighter AAM (Missile Speed + Aspect-Corrected Target Speed)
-              const missileSpdNmSec = 1.0; // Mach 4.5
-              const closureRate = calculateClosureRate({x: track.x, y: track.y}, closestHostile, missileSpdNmSec);
-              
-              const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
-              const interceptTimeMs = interceptTimeSecs * 1000;
-
-              events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
-              events.push({ type: 'COST', amount: 1200000 });
-
-              const targetInNext = nextTracks.find(t => t.id === targetId);
-              if (targetInNext) {
-                targetInNext.interceptors = targetInNext.interceptors || [];
-                targetInNext.interceptors.push({
-                  id: `AAM-${Date.now()}-${Math.random()}`,
-                  weapon: 'AMRAAM',
-                  shooterId: fighterId,
-                  launchPos: { x: track.x, y: track.y },
-                  engagementTime: Date.now(),
-                  interceptDuration: interceptTimeMs,
-                  interceptTtl: Math.ceil(interceptTimeSecs)
-                });
-              }
-
-              return { ...track, missilesRemaining: track.missilesRemaining! - 1, hdg: (track.hdg + 60) % 360, targetWaypoint: null };
-            } else {
-              // Log acquisition
-              if (!track.targetWaypoint || track.targetWaypoint.x !== closestHostile!.x) {
-                events.push({ type: 'LOG', message: `${track.id}: Intercepting TRACK ${closestHostile.id}.`, logType: 'INFO' });
-              }
-              return { ...track, targetWaypoint: { x: closestHostile.x, y: closestHostile.y } };
-            }
-          }
-          return track;
-        });
+        // 3. Fighter AI (VID, Targeting, and Auto-Engagement)
+        nextTracks = processFighters(nextTracks, events, Date.now());
 
         // 4. Cleanup and RTB
         nextTracks = nextTracks.map(track => {
