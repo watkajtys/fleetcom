@@ -9,18 +9,18 @@ import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSET
 import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate } from './utils';
 import { MISSION_STEPS } from './mission';
 
-const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, color: string, cameraZoom: number }) => {
+const MissileVector = React.memo(({ track, color, cameraZoom, lastSweepTime }: { track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     if (!track.engagementTime || !track.interceptDuration) return;
-    const interval = setInterval(() => setNow(Date.now()), 100);
+    const interval = setInterval(() => setNow(Date.now()), 50);
     return () => clearInterval(interval);
   }, [track.engagementTime, track.interceptDuration]);
 
   if (!track.engagementTime || !track.interceptDuration || track.interceptTtl === undefined) return null;
   
-  const elapsedSinceLastSweep = (now % 3000) / 1000;
+  const elapsedSinceLastSweep = (now - lastSweepTime) / 1000;
   const smoothTti = Math.max(0, track.interceptTtl - elapsedSinceLastSweep);
   const totalDuration = track.interceptDuration / 1000;
   const progress = Math.min(1, 1 - (smoothTti / totalDuration));
@@ -30,9 +30,13 @@ const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, 
   const startX = track.launchPos ? track.launchPos.x : BATTERY_POS.x;
   const startY = track.launchPos ? track.launchPos.y : BATTERY_POS.y;
 
-  // Lead Pursuit: Aim at where the target will be at impact
-  const targetLeadX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
-  const targetLeadY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
+  // Predict where the target is RIGHT NOW (Interpolated)
+  const currentTargetX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
+  const currentTargetY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
+
+  // Predict where the target WILL BE at impact (Lead Point)
+  const targetLeadX = currentTargetX + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
+  const targetLeadY = currentTargetY - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * smoothTti);
 
   const missileX = startX + (targetLeadX - startX) * progress;
   const missileY = startY + (targetLeadY - startY) * progress;
@@ -56,18 +60,31 @@ const MissileVector = React.memo(({ track, color, cameraZoom }: { track: Track, 
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number },
-  nextProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number }
+  prevProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
+  nextProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
   if (prevProps.shooter !== nextProps.shooter) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
+  if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom }: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number }) => {
+const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, lastSweepTime }: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (track.detected === false) return;
+    const interval = setInterval(() => setNow(Date.now()), 50);
+    return () => clearInterval(interval);
+  }, [track.detected]);
+
   if (track.detected === false) return null;
+
+  const elapsed = (now - lastSweepTime) / 1000;
+  const smoothX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
+  const smoothY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
   if (track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') color = '#00FFFF'; // Pure Cyan
@@ -88,14 +105,14 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom }: { trac
       {track.engagedBy && (
         <line 
           x1={startX} y1={startY}
-          x2={track.x} y2={track.y} 
+          x2={smoothX} y2={smoothY} 
           stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
           className="animate-pulse"
         />
       )}
 
       {/* Missile Vector & TTI */}
-      {track.engagedBy && <MissileVector track={track} color={color} cameraZoom={cameraZoom} />}
+      {track.engagedBy && <MissileVector track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} />}
 
       {/* Track History Breadcrumbs */}
       {track.history.map((pos, i) => (
@@ -103,7 +120,7 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom }: { trac
       ))}
       
       <g 
-        transform={`translate(${track.x}, ${track.y})`} 
+        transform={`translate(${smoothX}, ${smoothY})`} 
         className="cursor-pointer"
       >
         {/* Invisible larger hit area for easier clicking */}
@@ -461,6 +478,7 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
 
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
+  const [lastSweepTime, setLastSweepTime] = useState(Date.now());
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
     { id: 1, time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
@@ -710,6 +728,7 @@ export default function App() {
         if (e.type === 'COST') setDefenseCost(prev => prev + e.amount!);
       });
 
+      setLastSweepTime(Date.now());
     }, 3000);
 
     return () => {
@@ -731,6 +750,7 @@ export default function App() {
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const coords = getMapCoords(e, e.currentTarget);
+    const elapsed = (Date.now() - lastSweepTime) / 1000;
 
     if (vectoringTrackId) {
       setTracks(current => current.map(t => 
@@ -741,29 +761,24 @@ export default function App() {
       return;
     }
 
-    if (e.shiftKey) {
-      // Toggle logic or start box select
-      const CLICK_RADIUS = 2.0;
-      const nearbyTracks = tracksRef.current
-        .filter(t => t.detected !== false)
-        .filter(t => calculateRange(t.x, t.y, coords.x, coords.y) <= CLICK_RADIUS);
+    const CLICK_RADIUS = 2.5; // Slightly larger for easier selection on high-speed targets
+    const nearbyTracks = tracksRef.current
+      .filter(t => t.detected !== false)
+      .filter(t => {
+        const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+        const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+        return calculateRange(smoothX, smoothY, coords.x, coords.y) <= CLICK_RADIUS;
+      });
 
+    if (e.shiftKey) {
       if (nearbyTracks.length > 0) {
-        // Shift + Click on a track: toggle its selection state
         const targetId = nearbyTracks[0].id;
         setHookedTrackIds(prev => prev.includes(targetId) ? prev.filter(id => id !== targetId) : [...prev, targetId]);
       } else {
-        // Shift + Click on background: start marquee
         setIsSelecting(true);
         setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
       }
     } else {
-      // Single Click / Cycle handling
-      const CLICK_RADIUS = 2.0;
-      const nearbyTracks = tracksRef.current
-        .filter(t => t.detected !== false)
-        .filter(t => calculateRange(t.x, t.y, coords.x, coords.y) <= CLICK_RADIUS);
-
       if (nearbyTracks.length > 0) {
         const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
         const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
@@ -775,7 +790,6 @@ export default function App() {
           setHookedTrackIds([nearbyTracks[0].id]);
         }
       } else {
-        // Truly empty background click
         if (e.target === e.currentTarget || (e.target instanceof SVGElement && e.target.tagName === 'svg')) {
           setHookedTrackIds([]);
         }
@@ -1090,6 +1104,7 @@ export default function App() {
                 shooter={shooter}
                 isHooked={hookedTrackIds.includes(track.id)}
                 cameraZoom={camera.zoom}
+                lastSweepTime={lastSweepTime}
               />
             );
           })}
