@@ -654,8 +654,10 @@ export default function App() {
           
           const MAX_DETECT_RANGE = 50;
           const WEAPON_RANGE = 18;
-          const SELF_DEFENSE_RANGE = 12;
-          const searchRange = track.targetWaypoint ? SELF_DEFENSE_RANGE : MAX_DETECT_RANGE;
+          
+          // If fighter has a manual waypoint, only auto-engage if target is within WEAPON_RANGE (Immediate threat)
+          // Otherwise, auto-hunt within MAX_DETECT_RANGE
+          const searchRange = track.targetWaypoint ? WEAPON_RANGE : MAX_DETECT_RANGE;
 
           let closestHostile: Track | null = null;
           let minRange = searchRange;
