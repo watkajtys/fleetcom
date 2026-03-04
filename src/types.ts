@@ -1,6 +1,16 @@
 export type TrackType = 'PENDING' | 'UNKNOWN' | 'ASSUMED_FRIEND' | 'FRIEND' | 'NEUTRAL' | 'SUSPECT' | 'HOSTILE';
 export type TrackCategory = 'FW' | 'RW' | 'UAS' | 'CM' | 'TBM';
 
+export interface Interceptor {
+  id: string; // Unique ID for the missile
+  weapon: 'PAC-3' | 'SHORAD' | 'THAAD' | 'AMRAAM';
+  shooterId: string; // ID of the battery or fighter that fired it
+  launchPos: {x: number, y: number};
+  engagementTime: number;
+  interceptDuration: number;
+  interceptTtl: number;
+}
+
 export interface Track {
   id: string;
   type: TrackType;
@@ -14,11 +24,7 @@ export interface Track {
   iffInterrogated: boolean;
   tq: number; // Track Quality 1-9
   coasting: boolean; // True if radar temporarily lost lock
-  engagedBy: 'PAC-3' | 'SHORAD' | 'THAAD' | 'VIPER' | string | null;
-  engagementTime?: number;
-  interceptDuration?: number;
-  interceptTtl?: number;
-  launchPos?: {x: number, y: number};
+  interceptors: Interceptor[]; // Array of active missiles tracking this target
   sensor: 'LCL' | 'L16' | 'FUS';
   threatName?: string;
   detected?: boolean;

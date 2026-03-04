@@ -9,26 +9,26 @@ import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSET
 import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate } from './utils';
 import { MISSION_STEPS } from './mission';
 
-const MissileVector = React.memo(({ track, color, cameraZoom, lastSweepTime }: { track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
+const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (!track.engagementTime || !track.interceptDuration) return;
+    if (!interceptor.engagementTime || !interceptor.interceptDuration) return;
     const interval = setInterval(() => setNow(Date.now()), 50);
     return () => clearInterval(interval);
-  }, [track.engagementTime, track.interceptDuration]);
+  }, [interceptor.engagementTime, interceptor.interceptDuration]);
 
-  if (!track.engagementTime || !track.interceptDuration || track.interceptTtl === undefined) return null;
+  if (!interceptor.engagementTime || !interceptor.interceptDuration || interceptor.interceptTtl === undefined) return null;
   
   const elapsedSinceLastSweep = (now - lastSweepTime) / 1000;
-  const smoothTti = Math.max(0, track.interceptTtl - elapsedSinceLastSweep);
-  const totalDuration = track.interceptDuration / 1000;
+  const smoothTti = Math.max(0, interceptor.interceptTtl - elapsedSinceLastSweep);
+  const totalDuration = interceptor.interceptDuration / 1000;
   const progress = Math.min(1, 1 - (smoothTti / totalDuration));
 
   if (progress >= 1 || smoothTti <= 0) return null;
 
-  const startX = track.launchPos ? track.launchPos.x : BATTERY_POS.x;
-  const startY = track.launchPos ? track.launchPos.y : BATTERY_POS.y;
+  const startX = interceptor.launchPos.x;
+  const startY = interceptor.launchPos.y;
 
   // Predict where the target is RIGHT NOW (Interpolated)
   const currentTargetX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
@@ -60,18 +60,17 @@ const MissileVector = React.memo(({ track, color, cameraZoom, lastSweepTime }: {
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
-  nextProps: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
+  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
+  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
-  if (prevProps.shooter !== nextProps.shooter) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
   if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, lastSweepTime }: { track: Track, shooter: Track | undefined, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
+const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime }: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -95,24 +94,24 @@ const TrackSymbol = React.memo(({ track, shooter, isHooked, cameraZoom, lastSwee
   // Logarithmic velocity vector to handle wide speed range (100kts to 4000kts)
   // Ensures slow drones have visible leaders while TBMs don't shoot off screen
   const vectorLength = 2.0 * Math.log10(track.spd / 10 + 1); 
-  
-  const startX = shooter ? shooter.x : BATTERY_POS.x;
-  const startY = shooter ? shooter.y : BATTERY_POS.y;
 
   return (
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
-      {/* Pairing Line (Shooter to Target) */}
-      {track.engagedBy && (
+      {/* Pairing Lines (Shooter to Target) */}
+      {track.interceptors && track.interceptors.map((interceptor) => (
         <line 
-          x1={startX} y1={startY}
+          key={`line-${interceptor.id}`}
+          x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
           x2={smoothX} y2={smoothY} 
           stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
           className="animate-pulse"
         />
-      )}
+      ))}
 
-      {/* Missile Vector & TTI */}
-      {track.engagedBy && <MissileVector track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} />}
+      {/* Missile Vectors & TTI */}
+      {track.interceptors && track.interceptors.map((interceptor) => (
+        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} />
+      ))}
 
       {/* Track History Breadcrumbs */}
       {track.history.map((pos, i) => (
@@ -546,23 +545,52 @@ export default function App() {
       const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
 
       setTracks(currentTracks => {
-        // 1. Progress intercepts and identify splashes
+        // 1. Progress intercepts and identify splashes/misses
         let nextTracks = currentTracks.map(t => {
-          if (t.engagedBy && t.interceptTtl !== undefined) {
-            return { ...t, interceptTtl: Math.max(0, t.interceptTtl - 3) }; // 3 sec per sweep
+          if (t.interceptors && t.interceptors.length > 0) {
+            const updatedInterceptors = t.interceptors.map(i => ({
+              ...i,
+              interceptTtl: Math.max(0, i.interceptTtl - 3)
+            }));
+            return { ...t, interceptors: updatedInterceptors };
           }
           return t;
         });
 
-        // Identify splashes
+        // Evaluate Impacts
+        const destroyedTrackIds = new Set<string>();
+
         nextTracks.forEach(t => {
-          if (t.engagedBy && t.interceptTtl === 0) {
-            events.push({ type: 'LOG', message: `TRACK ${t.id} SPLASH. (${t.engagedBy})`, logType: 'INFO' });
-          }
+          if (!t.interceptors) return;
+          
+          t.interceptors.forEach(interceptor => {
+            if (interceptor.interceptTtl === 0 && !destroyedTrackIds.has(t.id)) {
+              // Stochastic Pk Check
+              const stats = WEAPON_STATS[interceptor.weapon];
+              const roll = Math.random();
+              
+              if (roll <= stats.pk) {
+                // Hit
+                events.push({ type: 'LOG', message: `TRACK ${t.id} SPLASH (${interceptor.shooterId}).`, logType: 'INFO' });
+                destroyedTrackIds.add(t.id);
+              } else {
+                // Miss
+                events.push({ type: 'LOG', message: `${interceptor.shooterId} MISSED TRACK ${t.id} (LOST LOCK).`, logType: 'WARN' });
+              }
+            }
+          });
         });
 
         // Remove splashed targets
-        nextTracks = nextTracks.filter(t => !(t.engagedBy && t.interceptTtl === 0));
+        nextTracks = nextTracks.filter(t => !destroyedTrackIds.has(t.id));
+
+        // Clean up completed interceptors (hits or misses) from surviving tracks
+        nextTracks = nextTracks.map(t => {
+          if (t.interceptors && t.interceptors.length > 0) {
+            return { ...t, interceptors: t.interceptors.filter(i => i.interceptTtl > 0) };
+          }
+          return t;
+        });
 
         // 2. Standard movement and physics
         nextTracks = nextTracks.map(track => {
@@ -625,7 +653,7 @@ export default function App() {
         });
 
         // 3. Fighter VID and Auto-Engagement
-        const hostiles = nextTracks.filter(t => t.type === 'HOSTILE' && !t.engagedBy && (t.category === 'UAS' || t.category === 'CM' || t.category === 'FW'));
+        const hostiles = nextTracks.filter(t => t.type === 'HOSTILE' && (!t.interceptors || t.interceptors.length < 2) && (t.category === 'UAS' || t.category === 'CM' || t.category === 'FW'));
         const unknowns = nextTracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
         const targetedHostileIds = new Set<string>();
 
@@ -661,7 +689,8 @@ export default function App() {
           let minRange = searchRange;
 
           for (const hostile of hostiles) {
-            if (hostile.engagedBy || targetedHostileIds.has(hostile.id)) continue;
+            // Re-check interceptor count since other fighters may have just targeted it in this sweep
+            if ((hostile.interceptors && hostile.interceptors.length >= 2) || targetedHostileIds.has(hostile.id)) continue;
             const range = calculateRange(track.x, track.y, hostile.x, hostile.y);
             if (range < minRange) {
               minRange = range;
@@ -691,11 +720,16 @@ export default function App() {
 
               const targetInNext = nextTracks.find(t => t.id === targetId);
               if (targetInNext) {
-                targetInNext.engagedBy = fighterId;
-                targetInNext.engagementTime = Date.now();
-                targetInNext.interceptDuration = interceptTimeMs;
-                targetInNext.interceptTtl = Math.ceil(interceptTimeSecs);
-                targetInNext.launchPos = { x: track.x, y: track.y };
+                targetInNext.interceptors = targetInNext.interceptors || [];
+                targetInNext.interceptors.push({
+                  id: `AAM-${Date.now()}-${Math.random()}`,
+                  weapon: 'AMRAAM',
+                  shooterId: fighterId,
+                  launchPos: { x: track.x, y: track.y },
+                  engagementTime: Date.now(),
+                  interceptDuration: interceptTimeMs,
+                  interceptTtl: Math.ceil(interceptTimeSecs)
+                });
               }
 
               return { ...track, missilesRemaining: track.missilesRemaining! - 1, hdg: (track.hdg + 60) % 360, targetWaypoint: null };
@@ -951,7 +985,7 @@ export default function App() {
 
     hookedTrackIds.forEach((id, index) => {
       const target = tracksRef.current.find(t => t.id === id);
-      if (!target || target.type !== 'HOSTILE' || target.engagedBy) return;
+      if (!target || target.type !== 'HOSTILE' || (target.interceptors && target.interceptors.length >= 2)) return;
 
       const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
       if (rng > stats.range) return;
@@ -978,7 +1012,7 @@ export default function App() {
         setDefenseCost(prev => prev + stats.cost);
         addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
         
-        const missileSpdNmSec = weapon === "THAAD" ? 1.5 : 0.7; // Mach 8 vs Mach 4
+        const missileSpdNmSec = weapon === "THAAD" ? 1.5 : (weapon === "PAC-3" ? 0.7 : 0.5); // Mach 8 vs Mach 4 vs Mach 3
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
         
         const interceptTimeSecs = rng / Math.max(0.1, closureRate);
@@ -986,14 +1020,21 @@ export default function App() {
 
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
 
-        setTracks(current => current.map(t => t.id === id ? { 
-          ...t, 
-          engagedBy: weapon,
-          engagementTime: Date.now(),
-          interceptDuration: interceptTimeMs,
-          interceptTtl: Math.ceil(interceptTimeSecs),
-          launchPos
-        } : t));
+        setTracks(current => current.map(t => {
+          if (t.id === id) {
+            const newInterceptor = {
+              id: `${weapon}-${Date.now()}-${Math.random()}`,
+              weapon,
+              shooterId: 'BATTERY',
+              launchPos,
+              engagementTime: Date.now(),
+              interceptDuration: interceptTimeMs,
+              interceptTtl: Math.ceil(interceptTimeSecs)
+            };
+            return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+          }
+          return t;
+        }));
       }, index * 500);
     });
   }, [hookedTrackIds, inventory]);
@@ -1098,12 +1139,10 @@ export default function App() {
           ))}
 
           {tracks.map(track => {
-            const shooter = track.engagedBy ? tracks.find(t => t.id === track.engagedBy) : undefined;
             return (
               <TrackSymbol
                 key={`track-group-${track.id}`}
                 track={track}
-                shooter={shooter}
                 isHooked={hookedTrackIds.includes(track.id)}
                 cameraZoom={camera.zoom}
                 lastSweepTime={lastSweepTime}

@@ -48,7 +48,7 @@ export const createTargetTrack = (
     iffInterrogated: false,
     tq: category === 'UAS' || category === 'CM' ? Math.floor(Math.random() * 3) + 2 : 9,
     coasting: false,
-    engagedBy: null,
+    interceptors: [],
     sensor,
     detected: isDetected
   };
@@ -76,7 +76,7 @@ export const createCrossingTrack = (
     iffInterrogated: false,
     tq: 9,
     coasting: false,
-    engagedBy: null,
+    interceptors: [],
     sensor: 'L16',
     detected: true
   };
