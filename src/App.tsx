@@ -571,17 +571,19 @@ export default function App() {
           
           t.interceptors.forEach(interceptor => {
             if (interceptor.interceptTtl === 0 && !destroyedTrackIds.has(t.id)) {
-              // Stochastic Pk Check
-              const stats = WEAPON_STATS[interceptor.weapon] || { pk: 0.8 }; // Fallback to 80% if undefined
+              // Stochastic Pk Check with absolute safety fallback to prevent crashes
+              const weaponKey = interceptor.weapon as keyof typeof WEAPON_STATS;
+              const stats = WEAPON_STATS[weaponKey];
+              const pkValue = stats ? stats.pk : 0.8; // Safe extraction
               const roll = Math.random();
               
-              if (roll <= stats.pk) {
+              if (roll <= pkValue) {
                 // Hit
                 events.push({ type: 'LOG', message: `TRACK ${t.id} SPLASH (${interceptor.shooterId}).`, logType: 'INFO' });
                 destroyedTrackIds.add(t.id);
               } else {
                 // Miss
-                events.push({ type: 'LOG', message: `${interceptor.shooterId} MISSED TRACK ${t.id} (R: ${roll.toFixed(2)} > Pk: ${stats.pk.toFixed(2)}).`, logType: 'WARN' });
+                events.push({ type: 'LOG', message: `${interceptor.shooterId} MISSED TRACK ${t.id} (R: ${roll.toFixed(2)} > Pk: ${pkValue.toFixed(2)}).`, logType: 'WARN' });
               }
             }
           });
