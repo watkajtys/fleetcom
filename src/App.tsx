@@ -574,7 +574,7 @@ export default function App() {
               // Stochastic Pk Check with absolute safety fallback to prevent crashes
               const weaponKey = interceptor.weapon as keyof typeof WEAPON_STATS;
               const stats = WEAPON_STATS[weaponKey];
-              const pkValue = stats ? stats.pk : 0.8; // Safe extraction
+              const pkValue = stats?.pk ?? 0.8; // Extremely safe extraction
               const roll = Math.random();
               
               if (roll <= pkValue) {
