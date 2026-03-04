@@ -566,7 +566,7 @@ export default function App() {
           t.interceptors.forEach(interceptor => {
             if (interceptor.interceptTtl === 0 && !destroyedTrackIds.has(t.id)) {
               // Stochastic Pk Check
-              const stats = WEAPON_STATS[interceptor.weapon];
+              const stats = WEAPON_STATS[interceptor.weapon] || { pk: 0.8 }; // Fallback to 80% if undefined
               const roll = Math.random();
               
               if (roll <= stats.pk) {
@@ -575,7 +575,7 @@ export default function App() {
                 destroyedTrackIds.add(t.id);
               } else {
                 // Miss
-                events.push({ type: 'LOG', message: `${interceptor.shooterId} MISSED TRACK ${t.id} (LOST LOCK).`, logType: 'WARN' });
+                events.push({ type: 'LOG', message: `${interceptor.shooterId} MISSED TRACK ${t.id} (R: ${roll.toFixed(2)} > Pk: ${stats.pk.toFixed(2)}).`, logType: 'WARN' });
               }
             }
           });
