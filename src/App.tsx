@@ -1157,6 +1157,24 @@ export default function App() {
       const target = useTrackStore.getState().getTrack(id);
       if (!target || target.type !== 'HOSTILE') return;
 
+      // Kinematic limitations
+      if (weapon === 'SHORAD') {
+        if (target.category === 'TBM') {
+          addLog(`SHORAD CANNOT ENGAGE TBM (OUT OF ENVELOPE)`, 'WARN');
+          return;
+        }
+        if (target.alt > 30000) {
+          addLog(`SHORAD CANNOT ENGAGE TRK ${target.id} (ALTITUDE > 30K FT)`, 'WARN');
+          return;
+        }
+      }
+
+      if (weapon === 'PAC-3' || weapon === 'THAAD') {
+        if (target.category === 'UAS') {
+          addLog(`WARNING: USING HIGH-VALUE ASSET ON LOW-VALUE UAS`, 'WARN');
+        }
+      }
+
       const existingShots = target.interceptors ? target.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
       if (existingShots >= 1) return; // Already engaged
 
