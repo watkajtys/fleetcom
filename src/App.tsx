@@ -78,9 +78,9 @@ const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime, no
   const smoothY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
-  if (track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') color = '#00FF33'; // Tactical Green
+  if (track.type === 'FRIEND') color = '#00FF33'; // Tactical Green
+  if (track.type === 'ASSUMED_FRIEND' || track.type === 'NEUTRAL') color = '#00FFFF'; // Cyan
   if (track.type === 'HOSTILE') color = '#FF0000'; // Pure Red
-  if (track.type === 'NEUTRAL') color = '#CCCCCC'; // Light Grey
   if (track.type === 'SUSPECT') color = '#FF8800'; // Orange
 
   // Logarithmic velocity vector to handle wide speed range (100kts to 4000kts)
@@ -255,9 +255,9 @@ const TrackSummaryTable = React.memo(({ tracks, hookedTrackIds, setHookedTrackId
               const range = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1);
               const isHooked = hookedTrackIds.includes(t.id);
               let typeColor = 'text-[#FFFF00]';
-              if (t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND') typeColor = 'text-[#00FF33]';
+              if (t.type === 'FRIEND') typeColor = 'text-[#00FF33]';
+              if (t.type === 'ASSUMED_FRIEND' || t.type === 'NEUTRAL') typeColor = 'text-[#00FFFF]';
               if (t.type === 'HOSTILE') typeColor = 'text-[#FF0000]';
-              if (t.type === 'NEUTRAL') typeColor = 'text-[#CCCCCC]';
               if (t.type === 'SUSPECT') typeColor = 'text-[#FF8800]';
 
               return (
@@ -347,7 +347,8 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
               <div className="text-[10px] text-[#004466] mb-2 uppercase tracking-tighter">Selection Breakdown</div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="text-[#FF0000]">HOSTILE: {hookedTracks.filter(t => t.type === 'HOSTILE').length}</div>
-                <div className="text-[#00FFFF]">FRIENDLY: {hookedTracks.filter(t => t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND').length}</div>
+                <div className="text-[#00FF33]">FRIENDLY: {hookedTracks.filter(t => t.type === 'FRIEND').length}</div>
+                <div className="text-[#00FFFF]">NEUTRAL/ASM: {hookedTracks.filter(t => t.type === 'NEUTRAL' || t.type === 'ASSUMED_FRIEND').length}</div>
                 <div className="text-[#FFFF00]">PENDING: {hookedTracks.filter(t => t.type === 'PENDING' || t.type === 'UNKNOWN').length}</div>
                 <div className="text-[#FF8800]">SUSPECT: {hookedTracks.filter(t => t.type === 'SUSPECT').length}</div>
               </div>
@@ -370,9 +371,9 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
             <div className="border border-[#002B40] bg-[#000A14]/30 p-3 flex justify-between items-center">
               <span className="text-2xl font-bold text-[#00E5FF] tracking-wider">{hookedTrack.id}</span>
               <span className={`px-2 py-1 text-xs font-bold border ${
-                (hookedTrack.type === 'FRIEND' || hookedTrack.type === 'ASSUMED_FRIEND') ? 'border-[#00FF33] text-[#00FF33] bg-[#00FF33]/10' :
+                hookedTrack.type === 'FRIEND' ? 'border-[#00FF33] text-[#00FF33] bg-[#00FF33]/10' :
+                (hookedTrack.type === 'ASSUMED_FRIEND' || hookedTrack.type === 'NEUTRAL') ? 'border-[#00FFFF] text-[#00FFFF] bg-[#00FFFF]/10' :
                 hookedTrack.type === 'HOSTILE' ? 'border-[#FF0000] text-[#FF0000] bg-[#FF0000]/10 animate-pulse' :
-                hookedTrack.type === 'NEUTRAL' ? 'border-[#CCCCCC] text-[#CCCCCC] bg-[#CCCCCC]/10' :
                 hookedTrack.type === 'SUSPECT' ? 'border-[#FF8800] text-[#FF8800] bg-[#FF8800]/10' :
                 'border-[#FFFF00] text-[#FFFF00] bg-[#FFFF00]/10'
               }`}>
