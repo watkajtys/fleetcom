@@ -109,9 +109,9 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 50,
-    message: 'WARNING RED. MULTIPLE HIGH-ALTITUDE, HIGH-VELOCITY TRACKS DETECTED. EVALUATED HOSTILE MRBM. VELOCITY MACH 6. DESCENDING THROUGH FL600. IMPACT DUBAI 90 SECONDS. RECOMMEND IMMEDIATE THAAD ENGAGEMENT.',
+    message: 'WARNING RED. TBM WAVE 1. HIGH-ALTITUDE TRACKS DETECTED. EVALUATED HOSTILE MRBM. IMPACT DUBAI 90 SECONDS.',
     type: 'ALERT',
-    generateTracks: () => Array.from({length: 8}).map(() => createTargetTrack(
+    generateTracks: () => Array.from({length: 4}).map(() => createTargetTrack(
       'PENDING', 'TBM',
       340 + Math.random() * 20, 
       85 + Math.random() * 5,   
@@ -122,10 +122,10 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 80,
-    message: 'WARNING RED. MASSIVE LOW-ALTITUDE SIGNATURES DETECTED SEAWARD. EVALUATED MIXED UAS/CM SWARM. SATURATION ATTACK IMMINENT. CONSERVE HIGH-VALUE INTERCEPTORS.',
+    message: 'WARNING RED. SWARM WAVE 1 DETECTED SEAWARD. EVALUATED MIXED UAS/CM.',
     type: 'ALERT',
     generateTracks: () => [
-      ...Array.from({length: 20}).map(() => createTargetTrack(
+      ...Array.from({length: 10}).map(() => createTargetTrack(
         'PENDING', 'UAS', 
         315 + Math.random() * 30, 
         60 + Math.random() * 10,  
@@ -133,7 +133,7 @@ export const MISSION_STEPS: MissionEvent[] = [
         200 + Math.random() * 300, 
         'L16'
       )),
-      ...Array.from({length: 8}).map(() => createTargetTrack(
+      ...Array.from({length: 4}).map(() => createTargetTrack(
         'PENDING', 'CM', 
         300 + Math.random() * 60, 
         65 + Math.random() * 5,  
@@ -145,11 +145,63 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 90,
-    message: 'HUNTRESS: SCRAMBLE FALCON 23, 24 TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
+    message: 'HUNTRESS: SCRAMBLE FALCON 23, 24 TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE.',
     type: 'ACTION',
     generateTracks: () => [
       { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 50, y: 40} },
       { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 55, y: 40} }
     ]
+  },
+  {
+    time: 140,
+    message: 'WARNING RED. TBM WAVE 2. MULTIPLE LAUNCHES DETECTED. RECOMMEND PAC-3 / THAAD LAYERED DEFENSE.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 6}).map(() => createTargetTrack(
+      'PENDING', 'TBM',
+      345 + Math.random() * 15, 
+      90 + Math.random() * 5,   
+      4000 + Math.random() * 300, 
+      160000 + Math.random() * 10000, 
+      'L16'
+    ))
+  },
+  {
+    time: 170,
+    message: 'WARNING RED. SWARM WAVE 2. MASSIVE UAS FORMATION EMERGING FROM CLUTTER. SATURATION ATTACK IMMINENT.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 25}).map(() => createTargetTrack(
+      'PENDING', 'UAS', 
+      310 + Math.random() * 40, 
+      65 + Math.random() * 15,  
+      100 + Math.random() * 15, 
+      200 + Math.random() * 300, 
+      'L16'
+    ))
+  },
+  {
+    time: 210,
+    message: 'WARNING RED. TBM WAVE 3. HEAVY SALVO DETECTED. BRACE FOR IMPACT.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 8}).map(() => createTargetTrack(
+      'PENDING', 'TBM',
+      330 + Math.random() * 30, 
+      85 + Math.random() * 10,   
+      3900 + Math.random() * 500, 
+      155000 + Math.random() * 15000, 
+      'L16'
+    ))
+  },
+  {
+    time: 250,
+    message: 'WARNING RED. VAMPIRE VAMPIRE VAMPIRE. FAST-MOVERS DETECTED FLANKING FROM THE EAST. EVALUATED SEA-SKIMMING CRUISE MISSILES.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 12}).map(() => createTargetTrack(
+      'PENDING', 'CM', 
+      90 + Math.random() * 20, // East
+      80 + Math.random() * 10,  
+      480 + Math.random() * 20, // Fast
+      100 + Math.random() * 50, // Sea-skimming
+      'L16'
+    ))
   }
 ];
