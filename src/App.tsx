@@ -170,8 +170,8 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
     <rect width="100" height="100" fill="url(#grid)" />
     
     {/* Defended Area Polygon */}
-    <path d="M 45,85 L 35,80 L 40,70 L 55,72 L 60,82 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
-    <text x="42" y="78" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4">DEFENDED ASSET</text>
+    <path d="M 45,70 L 38,62 L 53,48 L 58,52 L 48,72 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
+    <text x="42" y="65" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4">DEFENDED ASSET</text>
 
     {/* Radar Sector (FOV Wedge) - 120 degrees looking North */}
     <g transform={`translate(${BATTERY_POS.x}, ${BATTERY_POS.y})`}>
@@ -689,26 +689,46 @@ export default function App() {
         // 3. Fighter AI (VID, Targeting, and Auto-Engagement)
         nextTracks = processFighters(nextTracks, events, Date.now());
 
-        // 4. Cleanup and RTB
-        nextTracks = nextTracks.map(track => {
-          if (track.isFighter && !track.isRTB) {
-            if (track.missilesRemaining === 0) {
-              events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
-              return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
-            }
-            if (track.fuel !== undefined && track.maxFuel !== undefined && track.fuel < (track.maxFuel * 0.25)) {
-              events.push({ type: 'LOG', message: `${track.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
-              return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
-            }
-          }
-          return track;
-        });
-
-        return nextTracks.filter(t => 
-          !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 65, 65) < 2) &&
-          t.x >= -100 && t.x <= 200 && t.y >= -100 && t.y <= 200
-        );
-      });
+                // 4. Cleanup and RTB
+                nextTracks = nextTracks.map(track => {
+                  if (track.isFighter && !track.isRTB) {
+                    if (track.missilesRemaining === 0) {
+                      events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
+                      return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
+                    }
+                    if (track.fuel !== undefined && track.maxFuel !== undefined && track.fuel < (track.maxFuel * 0.25)) {
+                      events.push({ type: 'LOG', message: `${track.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
+                      return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
+                    }
+                  }
+                  return track;
+                });
+        
+                // 5. Leaker Detection (Impacts on Dubai)
+                const impactedTrackIds = new Set<string>();
+                nextTracks.forEach(t => {
+                  if (t.type === 'HOSTILE' || t.type === 'SUSPECT') {
+                    DEFENDED_ASSETS.forEach(asset => {
+                      const dist = calculateRange(t.x, t.y, asset.x, asset.y);
+                      // 2.5 NM threshold because fast TBMs jump ~3.3NM per 3s sweep
+                      if (dist < 2.5) {
+                        impactedTrackIds.add(t.id);
+                        events.push({ 
+                          type: 'LOG', 
+                          message: `!!! IMPACT: ${asset.name} STRUCK BY ${t.id} !!!`, 
+                          logType: 'ALERT' 
+                        });
+                        events.push({ type: 'IMPACT', amount: 1 } as any);
+                      }
+                    });
+                  }
+                });
+        
+                return nextTracks.filter(t =>
+                  !impactedTrackIds.has(t.id) &&
+                  !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 57.5, 62.5) < 2) &&
+                  t.x >= -100 && t.x <= 200 && t.y >= -100 && t.y <= 200
+                );      });
 
       events.forEach(e => {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
