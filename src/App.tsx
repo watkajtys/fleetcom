@@ -180,11 +180,11 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
     />
     
     {/* Palm Jebel Ali (Abstract Square) */}
-    <path d="M 36,60 L 38,58 L 40,60 L 38,62 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    <path d="M 37,58 L 39,56 L 41,58 L 39,60 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
     {/* Palm Jumeirah (Abstract Square) */}
-    <path d="M 46,53 L 48,51 L 50,53 L 48,55 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    <path d="M 46,51 L 48,49 L 50,51 L 48,53 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
     {/* The World Islands (Abstract Polygon) */}
-    <path d="M 52,46 L 56,44 L 57,47 L 53,48 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    <path d="M 52,45 L 55,43 L 57,46 L 54,47 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
 
     {/* Defended Urban Footprint (Dubai Metropolitan Area) */}
     <path d="M 40,60 L 60,42 L 65,48 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
