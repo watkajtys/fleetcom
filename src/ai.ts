@@ -22,7 +22,12 @@ export const processFighters = (
   const trackMap = new Map(tracks.map(t => [t.id, t]));
 
   // 1. Pre-process the battlespace for the fighters
-  const hostiles = tracks.filter(t => t.type === 'HOSTILE' && (!t.interceptors || t.interceptors.length < 2));
+  // Fighters will ignore any target that already has an inbound interceptor from the BATTERY,
+  // or any target that already has 2 or more interceptors from other fighters.
+  const hostiles = tracks.filter(t => 
+    t.type === 'HOSTILE' && 
+    (!t.interceptors || (!t.interceptors.some(i => i.shooterId === 'BATTERY') && t.interceptors.length < 2))
+  );
   const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
   
   // We use this to prevent two fighters from launching at the same target in the same sweep
