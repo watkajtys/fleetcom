@@ -15,6 +15,7 @@ import AfterActionReport from './AfterActionReport';
 
 const nowStore = {
   now: Date.now(),
+  mouseCoords: { x: 0, y: 0 },
   listeners: new Set<() => void>(),
   rafId: 0,
   subscribe: (listener: () => void) => {
@@ -30,6 +31,11 @@ const nowStore = {
     };
   },
   getSnapshot: () => nowStore.now,
+  getMouseSnapshot: () => nowStore.mouseCoords,
+  updateMouse: (x: number, y: number) => {
+    nowStore.mouseCoords = { x, y };
+    nowStore.listeners.forEach(l => l());
+  },
   start: () => {
     const tick = () => {
       nowStore.now = Date.now();
@@ -43,9 +49,13 @@ const nowStore = {
   }
 };
 
-const useNow = () => {
+function useNow() {
   return useSyncExternalStore(nowStore.subscribe, nowStore.getSnapshot);
-};
+}
+
+function useMouseCoords() {
+  return useSyncExternalStore(nowStore.subscribe, nowStore.getMouseSnapshot);
+}
 
 const getGstTimeStr = (offsetMs: number = 0) => {
   const now = new Date(Date.now() + offsetMs);
@@ -700,6 +710,32 @@ const DraggableWindow = ({ defaultPos, title, children, className = '' }: { defa
   );
 };
 
+const GhostVectorLine = React.memo(({ vectoringTrackId, cameraZoom }: { vectoringTrackId: string, cameraZoom: number }) => {
+  const track = useTrackStore(state => state.tracks[vectoringTrackId]);
+  const mouse = useMouseCoords();
+  
+  if (!track || (mouse.x === 0 && mouse.y === 0)) return null;
+
+  return (
+    <g>
+      <line 
+        x1={track.x} y1={track.y} 
+        x2={mouse.x} y2={mouse.y} 
+        stroke="#00E5FF" 
+        strokeWidth={0.2 / cameraZoom} 
+        strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
+        className="animate-pulse"
+      />
+      {/* Static Crosshair - No Ping to avoid "errant ghosting" */}
+      <g transform={`translate(${mouse.x}, ${mouse.y})`}>
+        <line x1={-0.8 / cameraZoom} y1={0} x2={0.8 / cameraZoom} y2={0} stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} />
+        <line x1={0} y1={-0.8 / cameraZoom} x2={0} y2={0.8 / cameraZoom} stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} />
+        <circle r={0.5 / cameraZoom} fill="none" stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} opacity="0.5" />
+      </g>
+    </g>
+  );
+});
+
 export default function App() {
   const trackIds = useTrackStore(state => state.trackIds);
   const addTracks = useTrackStore(state => state.addTracks);
@@ -727,7 +763,6 @@ export default function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
-  const [mouseCoords, setMouseCoords] = useState<{x: number, y: number}>({ x: 0, y: 0 });
   const simTimeRef = useRef(0);
 
   const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
@@ -1181,7 +1216,7 @@ export default function App() {
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const coords = getMapCoords(e, e.currentTarget);
-    setMouseCoords(coords);
+    nowStore.updateMouse(coords.x, coords.y);
 
     if (draggingWaypointId) {
       setTracks(current => current.map(t => 
@@ -1535,25 +1570,7 @@ export default function App() {
           <FighterWaypoints cameraZoom={camera.zoom} setDraggingWaypointId={setDraggingWaypointId} />
 
           {/* Render Ghost Vector Line */}
-          {vectoringTrackId && (
-            (() => {
-              const track = useTrackStore.getState().getTrack(vectoringTrackId);
-              if (!track) return null;
-              return (
-                <g>
-                  <line 
-                    x1={track.x} y1={track.y} 
-                    x2={mouseCoords.x} y2={mouseCoords.y} 
-                    stroke="#00E5FF" 
-                    strokeWidth={0.2 / camera.zoom} 
-                    strokeDasharray={`${0.5 / camera.zoom} ${0.5 / camera.zoom}`} 
-                    className="animate-pulse"
-                  />
-                  <circle cx={mouseCoords.x} cy={mouseCoords.y} r={1 / camera.zoom} fill="none" stroke="#00E5FF" strokeWidth={0.1 / camera.zoom} className="animate-ping" />
-                </g>
-              );
-            })()
-          )}
+          {vectoringTrackId && <GhostVectorLine vectoringTrackId={vectoringTrackId} cameraZoom={camera.zoom} />}
 
           {/* Render Splashes */}
           {splashes.map(s => (
