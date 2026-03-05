@@ -271,7 +271,7 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
       
       {/* WEZ Rings */}
       <circle cx="0" cy="0" r="35" fill="none" stroke="#FF0000" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} />
-      <text x="0" y="-35.5" fill="#FF0000" fontSize={0.6 / cameraZoom} textAnchor="middle" opacity="0.5">SHORAD WEZ</text>
+      <text x="0" y="-35.5" fill="#FF0000" fontSize={0.6 / cameraZoom} textAnchor="middle" opacity="0.5">IRON DOME WEZ</text>
       <circle cx="0" cy="0" r="25" fill="none" stroke="#FFFF00" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
       <text x="0" y="-25.5" fill="#FFFF00" fontSize={0.6 / cameraZoom} textAnchor="middle" opacity="0.5">PAC-3 WEZ</text>
       <circle cx="0" cy="0" r="100" fill="none" stroke="#FF00FF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${1 / cameraZoom} ${1 / cameraZoom}`} />
@@ -414,7 +414,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoShorad, setIsAutoShorad, filters, setFilters }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoShorad: boolean, setIsAutoShorad: React.Dispatch<React.SetStateAction<boolean>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
+const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoTamir, setIsAutoTamir, filters, setFilters }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoTamir: boolean, setIsAutoTamir: React.Dispatch<React.SetStateAction<boolean>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
   const tracksMap = useTrackStore(state => state.tracks);
   const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
 
@@ -560,11 +560,11 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
             <div className="flex flex-col gap-2 mt-auto">
               <div className="text-[10px] text-[#004466] font-bold whitespace-nowrap">GLOBAL DOCTRINE</div>
               <button 
-                onClick={() => setIsAutoShorad(p => !p)} 
-                className={`h-10 px-4 flex flex-col items-center justify-center text-[10px] lg:text-xs font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]' : 'bg-[#001A26] border-[#004466] text-[#00E5FF] hover:bg-[#002B40]'}`}
+                onClick={() => setIsAutoTamir(p => !p)} 
+                className={`h-10 px-4 flex flex-col items-center justify-center text-[10px] lg:text-xs font-bold tracking-widest transition-colors border ${isAutoTamir ? 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]' : 'bg-[#001A26] border-[#004466] text-[#00E5FF] hover:bg-[#002B40]'}`}
               >
-                <span className={`text-[8px] mb-0.5 ${isAutoShorad ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>8</span>
-                AUTO-SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
+                <span className={`text-[8px] mb-0.5 ${isAutoTamir ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>8</span>
+                AUTO-TAMIR: {isAutoTamir ? 'FREE' : 'HOLD'}
               </button>
             </div>
           </div>
@@ -637,11 +637,11 @@ export default function App() {
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
     { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
-  const [inventory, setInventory] = useState({ pac3: 32, shorad: 120, thaad: 8, cram: 999 });
-  const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'SHORAD': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
+  const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
+  const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
-  const [isAutoShorad, setIsAutoShorad] = useState(false);
+  const [isAutoTamir, setIsAutoTamir] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const simTimeRef = useRef(0);
 
@@ -837,36 +837,36 @@ export default function App() {
                   return track;
                 });
         
-                // 4.5 Automatic SHORAD Point Defense (Weapons Free)
-                let currentShorad = inventoryRef.current.shorad;
+                // 4.5 Automatic TAMIR Point Defense (Weapons Free)
+                let currentTamir = inventoryRef.current.tamir;
                 nextTracks = nextTracks.map(t => {
-                  if (isAutoShoradRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && currentShorad > 0) {
+                  if (isAutoTamirRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && currentTamir > 0) {
                     const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
-                    // Check if within 35NM SHORAD (Iron Dome) WEZ and not already being shot at by Battery
+                    // Check if within 35NM TAMIR (Iron Dome) WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
                     
-                    // Auto-SHORAD employs double-tap doctrine to guarantee kill on close-in leakers
+                    // Auto-TAMIR employs double-tap doctrine to guarantee kill on close-in leakers
                     const requiredMissiles = 2;
 
                     if (rng <= 35.0 && existingBatteryMissiles < requiredMissiles) {
-                      const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentShorad);
+                      const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentTamir);
                       
                       let newInterceptors = [];
                       for (let i = 0; i < shotsToTake; i++) {
-                        currentShorad--;
+                        currentTamir--;
                         
-                        setInterceptorsFired(prev => ({ ...prev, 'SHORAD': prev['SHORAD'] + 1 }));
+                        setInterceptorsFired(prev => ({ ...prev, 'TAMIR': prev['TAMIR'] + 1 }));
                         
-                        events.push({ type: 'LOG', message: `SHORAD AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
-                        events.push({ type: 'COST', amount: WEAPON_STATS['SHORAD'].cost });
+                        events.push({ type: 'LOG', message: `TAMIR AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
+                        events.push({ type: 'COST', amount: WEAPON_STATS['TAMIR'].cost });
                         
-                        const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['SHORAD'].speedMach);
+                        const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['TAMIR'].speedMach);
                         // Stagger intercept times slightly for visual clarity on double taps
                         const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (i * 0.5); 
                         
                         newInterceptors.push({
-                          id: `SHORAD-AUTO-${Date.now()}-${Math.random()}`,
-                          weapon: 'SHORAD' as const,
+                          id: `TAMIR-AUTO-${Date.now()}-${Math.random()}`,
+                          weapon: 'TAMIR' as const,
                           shooterId: 'BATTERY',
                           launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
                           engagementTime: Date.now() + (i * 500), // Physical launch stagger
@@ -881,34 +881,35 @@ export default function App() {
                   return t;
                 });
                 
-                if (currentShorad !== inventoryRef.current.shorad) {
-                   setInventory(prev => ({ ...prev, shorad: currentShorad }));
+                if (currentTamir !== inventoryRef.current.tamir) {
+                   setInventory(prev => ({ ...prev, tamir: currentTamir }));
                 }
 
                 // 4.6 Terminal Point Defense (C-RAM / Laser CIWS)
                 nextTracks = nextTracks.map(t => {
-                  if (t.type === 'HOSTILE' && t.category !== 'TBM') {
-                    const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
-                    // Extremely close range, last ditch defense (2.5 NM)
-                    if (rng <= 2.5 && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'CIWS'))) {
-                      
-                      setInterceptorsFired(prev => ({ ...prev, 'C-RAM': prev['C-RAM'] + 1 }));
-                      events.push({ type: 'LOG', message: `CIWS ENGAGING LEAKER TRK ${t.id}`, logType: 'ACTION' });
-                      events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
-                      
-                      const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['C-RAM'].speedMach);
-                      const interceptTimeSecs = rng / Math.max(0.1, closureRate);
-                      
-                      const newInterceptor = {
-                        id: `CIWS-${Date.now()}-${Math.random()}`,
-                        weapon: 'C-RAM' as const,
-                        shooterId: 'CIWS',
-                        launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
-                        engagementTime: Date.now(),
-                        interceptDuration: interceptTimeSecs * 1000,
-                        interceptTtl: Math.ceil(interceptTimeSecs)
-                      };
-                      return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+                  if (t.type === 'HOSTILE' && t.category !== 'TBM' && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'CIWS'))) {
+                    // Check if track is threatening ANY defended asset
+                    for (const asset of DEFENDED_ASSETS) {
+                      const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y);
+                      if (rngToAsset <= 2.5) {
+                        setInterceptorsFired(prev => ({ ...prev, 'C-RAM': prev['C-RAM'] + 1 }));
+                        events.push({ type: 'LOG', message: `CIWS (${asset.id}) ENGAGING LEAKER TRK ${t.id}`, logType: 'ACTION' });
+                        events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
+                        
+                        const closureRate = calculateClosureRate({x: asset.x, y: asset.y}, t, WEAPON_STATS['C-RAM'].speedMach);
+                        const interceptTimeSecs = rngToAsset / Math.max(0.1, closureRate);
+                        
+                        const newInterceptor = {
+                          id: `CIWS-${Date.now()}-${Math.random()}`,
+                          weapon: 'C-RAM' as const,
+                          shooterId: 'CIWS',
+                          launchPos: { x: asset.x, y: asset.y }, // Launch from the asset, not the battery
+                          engagementTime: Date.now(),
+                          interceptDuration: interceptTimeSecs * 1000,
+                          interceptTtl: Math.ceil(interceptTimeSecs)
+                        };
+                        return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+                      }
                     }
                   }
                   return t;
@@ -1174,63 +1175,62 @@ export default function App() {
     addLog(`GROUP DECLARE: ${hookedTrackIds.length} TRACKS SET TO ${newType}`, newType === 'HOSTILE' ? 'ALERT' : 'WARN');
   }, [hookedTrackIds]);
 
-  const handleEngage = useCallback((weapon: 'PAC-3' | 'SHORAD' | 'THAAD') => {
-    if (hookedTrackIds.length === 0) return;
-
-    const stats = WEAPON_STATS[weapon];
-    let currentPac3 = inventory.pac3;
-    let currentShorad = inventory.shorad;
-    let currentThaad = inventory.thaad;
-
-    hookedTrackIds.forEach((id, index) => {
-      const target = useTrackStore.getState().getTrack(id);
-      if (!target || target.type !== 'HOSTILE') return;
-
-      // Kinematic limitations
-      if (weapon === 'SHORAD') {
-        if (target.category === 'TBM') {
-          addLog(`SHORAD CANNOT ENGAGE TBM (OUT OF ENVELOPE)`, 'WARN');
-          return;
+    const handleEngage = useCallback((weapon: 'PAC-3' | 'TAMIR' | 'THAAD') => {
+      if (hookedTrackIds.length === 0) return;
+  
+      const stats = WEAPON_STATS[weapon];
+      let currentPac3 = inventory.pac3;
+      let currentTamir = inventory.tamir;
+      let currentThaad = inventory.thaad;
+  
+      hookedTrackIds.forEach((id, index) => {
+        const target = useTrackStore.getState().getTrack(id);
+        if (!target || target.type !== 'HOSTILE') return;
+  
+        // Kinematic limitations
+        if (weapon === 'TAMIR') {
+          if (target.category === 'TBM') {
+            addLog(`TAMIR CANNOT ENGAGE TBM (OUT OF ENVELOPE)`, 'WARN');
+            return;
+          }
+          if (target.alt > 30000) {
+            addLog(`TAMIR CANNOT ENGAGE TRK ${target.id} (ALTITUDE > 30K FT)`, 'WARN');
+            return;
+          }
         }
-        if (target.alt > 30000) {
-          addLog(`SHORAD CANNOT ENGAGE TRK ${target.id} (ALTITUDE > 30K FT)`, 'WARN');
-          return;
+  
+        if (weapon === 'PAC-3' || weapon === 'THAAD') {
+          if (target.category === 'UAS') {
+            addLog(`WARNING: USING HIGH-VALUE ASSET ON LOW-VALUE UAS`, 'WARN');
+          }
         }
-      }
-
-      if (weapon === 'PAC-3' || weapon === 'THAAD') {
-        if (target.category === 'UAS') {
-          addLog(`WARNING: USING HIGH-VALUE ASSET ON LOW-VALUE UAS`, 'WARN');
-        }
-      }
-
-      const existingShots = target.interceptors ? target.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
-      if (existingShots >= 1) return; // Already engaged
-
-      const shotsToTake = 1;
-      
-      // Check ammo
-      if (weapon === 'PAC-3' && currentPac3 <= 0) return;
-      if (weapon === 'SHORAD' && currentShorad <= 0) return;
-      if (weapon === 'THAAD' && currentThaad <= 0) return;
-
-      const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
-      if (rng > stats.range) return;
-
-      // Deduct from local count for this loop
-      if (weapon === 'PAC-3') currentPac3 -= shotsToTake;
-      if (weapon === 'SHORAD') currentShorad -= shotsToTake;
-      if (weapon === 'THAAD') currentThaad -= shotsToTake;
-
-      // Stagger launches
-      setTimeout(() => {
-        setInventory(prev => ({
-          ...prev,
-          pac3: weapon === 'PAC-3' ? prev.pac3 - shotsToTake : prev.pac3,
-          shorad: weapon === 'SHORAD' ? prev.shorad - shotsToTake : prev.shorad,
-          thaad: weapon === 'THAAD' ? prev.thaad - shotsToTake : prev.thaad,
-        }));
-        
+  
+        const existingShots = target.interceptors ? target.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
+        if (existingShots >= 1) return; // Already engaged
+  
+        const shotsToTake = 1;
+  
+        // Check ammo
+        if (weapon === 'PAC-3' && currentPac3 <= 0) return;
+        if (weapon === 'TAMIR' && currentTamir <= 0) return;
+        if (weapon === 'THAAD' && currentThaad <= 0) return;
+  
+        const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
+        if (rng > stats.range) return;
+  
+        // Deduct from local count for this loop
+        if (weapon === 'PAC-3') currentPac3 -= shotsToTake;
+        if (weapon === 'TAMIR') currentTamir -= shotsToTake;
+        if (weapon === 'THAAD') currentThaad -= shotsToTake;
+  
+        // Stagger launches
+        setTimeout(() => {
+          setInventory(prev => ({
+            ...prev,
+            pac3: weapon === 'PAC-3' ? prev.pac3 - shotsToTake : prev.pac3,
+            tamir: weapon === 'TAMIR' ? prev.tamir - shotsToTake : prev.tamir,
+            thaad: weapon === 'THAAD' ? prev.thaad - shotsToTake : prev.thaad,
+          }));        
         setInterceptorsFired(prev => ({
           ...prev,
           [weapon]: prev[weapon] + shotsToTake
@@ -1270,13 +1270,13 @@ export default function App() {
 
   const unackAlertsRef = useRef(unackAlerts);
   const inventoryRef = useRef(inventory);
-  const isAutoShoradRef = useRef(isAutoShorad);
+  const isAutoTamirRef = useRef(isAutoTamir);
 
   useEffect(() => {
     unackAlertsRef.current = unackAlerts;
     inventoryRef.current = inventory;
-    isAutoShoradRef.current = isAutoShorad;
-  }, [unackAlerts, inventory, isAutoShorad]);
+    isAutoTamirRef.current = isAutoTamir;
+  }, [unackAlerts, inventory, isAutoTamir]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1301,7 +1301,7 @@ export default function App() {
           handleEngage('PAC-3');
           break;
         case '6':
-          handleEngage('SHORAD');
+          handleEngage('TAMIR');
           break;
         case '7':
           setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
@@ -1392,7 +1392,7 @@ export default function App() {
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
             <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/120</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">TAMIR: <span className="text-[#00E5FF]">{inventory.tamir}/120</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
           </div>
         </div>
@@ -1420,7 +1420,7 @@ export default function App() {
         </div>
 
         {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoShorad={isAutoShorad} setIsAutoShorad={setIsAutoShorad} filters={filters} setFilters={setFilters} />
+        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoTamir={isAutoTamir} setIsAutoTamir={setIsAutoTamir} filters={filters} setFilters={setFilters} />
       </main>
 
       {/* --- BOTTOM SOFT KEY BAR --- */}
@@ -1478,10 +1478,10 @@ export default function App() {
         <button 
           className="h-10 px-2 lg:px-4 bg-[#222200] border border-[#FFCC00] hover:bg-[#333300] text-[#FFCC00] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
           disabled={hookedTrackIds.length === 0}
-          onClick={() => handleEngage('SHORAD')}
+          onClick={() => handleEngage('TAMIR')}
         >
           <span className="text-[8px] text-[#FFCC00] opacity-50 mb-0.5">6</span>
-          ENGAGE SHORAD
+          ENGAGE TAMIR
         </button>
 
         <div className="w-px h-8 bg-[#002B40] mx-1 lg:mx-2 shrink-0" />
