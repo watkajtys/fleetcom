@@ -60,6 +60,7 @@ export const processFighters = (
   // 1. Pre-process the battlespace for the fighters
   const hostiles = tracks.filter(t => 
     t.type === 'HOSTILE' && 
+    t.category !== 'TBM' &&
     (!t.interceptors || (!t.interceptors.some(i => i.shooterId === 'BATTERY') && t.interceptors.length < 2))
   );
   const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
