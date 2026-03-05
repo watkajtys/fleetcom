@@ -1547,61 +1547,62 @@ export default function App() {
         </svg>
       </div>
 
-      {/* --- TOP STATUS BAR --- */}
-      <header className={`h-16 bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between px-4 z-20 rounded-none transition-colors duration-300 shrink-0`}>
-        <div className="flex items-center gap-4 lg:gap-6">
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
-            <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
-              {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
-            <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
-            <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-            <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">TAMIR: <span className="text-[#00E5FF]">{inventory.tamir}/120</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
-          </div>
-        </div>
-        <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
-          {unackAlerts.length > 0 && (
-            <div className="bg-[#FF0033] text-[#00050A] px-2 py-1 animate-pulse border border-[#FF0033]">
-              {unackAlerts.length} UNACK ALERTS
-            </div>
-          )}
-          <span className="text-[#00E5FF]">ZULU: <SystemClock /></span>
-        </div>
-      </header>
-
-                                    {/* --- MAIN CONTENT AREA --- */}
-                                    <main className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
-                                      
-                                      {/* LEFT DRAGGABLE WINDOW */}
-                                      <DraggableWindow 
-                                        title="TRACK SUMMARY & LOGS" 
-                                        defaultPos={{ x: 16, y: 80 }} 
-                                        className="w-[280px] max-h-[calc(100vh-160px)]"
-                                      >
-                                        <div className="flex flex-col gap-4 p-4 h-full overflow-hidden">
-                                          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
-                                          <SystemEventLog logs={logs} />
-                                        </div>
-                                      </DraggableWindow>
-                              
-                                      {/* RIGHT DRAGGABLE WINDOW */}
-                                      <DraggableWindow 
-                                        title="TOTE & DOCTRINE" 
-                                        defaultPos={{ x: window.innerWidth ? window.innerWidth - 316 : 1000, y: 80 }} 
-                                        className="w-[300px] max-h-[calc(100vh-160px)]"
-                                      >
-                                        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoTamir={isAutoTamir} setIsAutoTamir={setIsAutoTamir} filters={filters} setFilters={setFilters} />
-                                      </DraggableWindow>
-                                      
-                                    </main>
-                              
-                                    {/* --- BOTTOM SOFT KEY BAR --- */}      <footer className="h-16 bg-[#00050A]/95 border-t border-[#002B40] flex items-center px-2 lg:px-4 gap-1 lg:gap-2 z-20 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {/* --- TOP STATUS BAR --- */}
+            <header className={`fixed top-0 left-0 right-0 h-16 bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between px-4 z-50 rounded-none transition-colors duration-300 shrink-0`}>
+              <div className="flex items-center gap-4 lg:gap-6">
+                <div className="flex items-center gap-2 whitespace-nowrap">
+                  <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
+                  <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
+                    {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
+                  <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
+                  <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
+                  <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
+                  <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
+                  <span className="text-[#00FF33] whitespace-nowrap">TAMIR: <span className="text-[#00E5FF]">{inventory.tamir}/120</span></span>
+                  <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
+                {unackAlerts.length > 0 && (
+                  <div className="bg-[#FF0033] text-[#00050A] px-2 py-1 animate-pulse border border-[#FF0033]">
+                    {unackAlerts.length} UNACK ALERTS
+                  </div>
+                )}
+                <span className="text-[#00E5FF]">ZULU: <SystemClock /></span>
+              </div>
+            </header>
+      
+            {/* --- MAIN CONTENT AREA --- */}
+            <main className="fixed inset-0 top-16 bottom-16 z-20 pointer-events-none overflow-hidden">
+              
+              {/* LEFT DRAGGABLE WINDOW */}
+              <DraggableWindow 
+                title="TRACK SUMMARY & LOGS" 
+                defaultPos={{ x: 16, y: 16 }} 
+                className="w-[280px] max-h-[calc(100vh-160px)]"
+              >
+                <div className="flex flex-col gap-4 p-4 h-full overflow-hidden">
+                  <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
+                  <SystemEventLog logs={logs} />
+                </div>
+              </DraggableWindow>
+      
+              {/* RIGHT DRAGGABLE WINDOW */}
+              <DraggableWindow 
+                title="TOTE & DOCTRINE" 
+                defaultPos={{ x: window.innerWidth ? window.innerWidth - 316 : 1000, y: 16 }} 
+                className="w-[300px] max-h-[calc(100vh-160px)]"
+              >
+                <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoTamir={isAutoTamir} setIsAutoTamir={setIsAutoTamir} filters={filters} setFilters={setFilters} />
+              </DraggableWindow>
+              
+            </main>
+      
+            {/* --- BOTTOM SOFT KEY BAR --- */}
+            <footer className="fixed bottom-0 left-0 right-0 h-16 bg-[#00050A]/95 border-t border-[#002B40] flex items-center px-2 lg:px-4 gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
         
         <button 
