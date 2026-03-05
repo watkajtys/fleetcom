@@ -10,6 +10,7 @@ import { getThreatName, calculateRange, calculateBearing, calculateKinematics, c
 import { MISSION_STEPS } from './mission';
 import { processFighters } from './ai';
 import { useSyncExternalStore } from 'react';
+import BriefingModal from './BriefingModal';
 
 const nowStore = {
   now: Date.now(),
@@ -650,6 +651,7 @@ export default function App() {
   const [isAutoTamir, setIsAutoTamir] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
+  const [isGameStarted, setIsGameStarted] = useState(false);
   const simTimeRef = useRef(0);
 
   const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
@@ -691,6 +693,8 @@ export default function App() {
   const unackAlerts = useMemo(() => logs.filter(l => !l.acknowledged), [logs]);
 
   useEffect(() => {
+    if (!isGameStarted) return;
+
     const clockTimer = setInterval(() => {
       simTimeRef.current += 1;
 
@@ -989,15 +993,16 @@ export default function App() {
         if (e.type === 'AMRAAM_FIRED') setInterceptorsFired(prev => ({ ...prev, 'AMRAAM': prev['AMRAAM'] + 1 }));
       });
 
-      setLastSweepTime(Date.now());
-    }, 3000);
-
-    return () => {
-      clearInterval(clockTimer);
-      clearInterval(sweepTimer);
-    };
-  }, [addLog]);
-  // --- INTERACTION HELPERS ---
+            setLastSweepTime(Date.now());
+          }, 3000);
+      
+          return () => {
+            clearInterval(clockTimer);
+            clearInterval(sweepTimer);
+          };
+        }, [addLog, isGameStarted]);
+      
+        // --- INTERACTION HELPERS ---
 
   const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent, container: HTMLDivElement) => {
     const svg = container.querySelector('svg');
@@ -1381,7 +1386,8 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
-      
+      {!isGameStarted && <BriefingModal onStart={() => setIsGameStarted(true)} />}
+
       {/* --- FULL SCREEN TACTICAL MAP BACKGROUND --- */}
       <div 
         className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden pointer-events-auto touch-none" 
