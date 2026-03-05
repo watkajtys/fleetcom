@@ -851,7 +851,9 @@ export default function App() {
                     const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
                     // Check if within 5NM SHORAD WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
-                    const requiredMissiles = salvoModeRef.current ? 2 : 1;
+                    
+                    // SHORAD is always Single-Shot doctrine due to magazine constraints
+                    const requiredMissiles = 1;
 
                     if (rng <= 5.0 && existingBatteryMissiles < requiredMissiles) {
                       const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentShorad);
@@ -1155,7 +1157,8 @@ export default function App() {
     let currentShorad = inventory.shorad;
     let currentThaad = inventory.thaad;
 
-    const requiredShots = salvoMode ? 2 : 1;
+    // SHORAD is strictly point-defense single-shot. Area defense can salvo.
+    const requiredShots = (salvoMode && weapon !== 'SHORAD') ? 2 : 1;
 
     hookedTrackIds.forEach((id, index) => {
       const target = useTrackStore.getState().getTrack(id);
