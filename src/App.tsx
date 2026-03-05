@@ -43,9 +43,16 @@ const nowStore = {
   }
 };
 
-function useNow() {
+const useNow = () => {
   return useSyncExternalStore(nowStore.subscribe, nowStore.getSnapshot);
-}
+};
+
+const getGstTimeStr = (offsetMs: number = 0) => {
+  const now = new Date(Date.now() + offsetMs);
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const gstDate = new Date(utc + (3600000 * 4));
+  return gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+};
 
 const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
   const now = useNow();
@@ -387,11 +394,19 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
 });
 
 const SystemClock = React.memo(() => {
-  const [time, setTime] = useState(() => new Date().toISOString().substring(11, 19) + 'Z');
+  const [time, setTime] = useState(() => {
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const gstDate = new Date(utc + (3600000 * 4));
+    return gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  });
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTime(new Date().toISOString().substring(11, 19) + 'Z');
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const gstDate = new Date(utc + (3600000 * 4));
+      setTime(gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -408,8 +423,12 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
       </div>
       <div className="flex-1 overflow-auto p-3 space-y-1.5 flex flex-col-reverse custom-scrollbar">
         {logs.map((log) => (
-          <div key={log.id} className={`text-[10px] flex gap-3 ${!log.acknowledged ? 'bg-[#FF0033]/20 border border-[#FF0033] p-1' : ''}`}>
-            <span className="text-[#004466] text-[8px] tabular-nums shrink-0 mt-0.5">{log.time}</span>
+          <div key={log.id} className={`text-[10px] flex gap-2 ${!log.acknowledged ? 'bg-[#FF0033]/20 border border-[#FF0033] p-1' : ''}`}>
+            <div className="flex flex-col w-4 text-[7px] text-[#004466] tabular-nums leading-none shrink-0 border-r border-[#004466]/30 pr-1 justify-center items-center font-bold">
+              <span>{log.time.substring(0, 2)}</span>
+              <span>{log.time.substring(3, 5)}</span>
+              <span>{log.time.substring(6, 8)}</span>
+            </div>
             <span className={`${
               log.type === 'ALERT' ? 'text-[#FF0033] font-bold' :
               log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' :
@@ -690,9 +709,10 @@ export default function App() {
 
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
-    { id: 'initial-1', time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
-    { id: 'initial-2', time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
-    { id: 'initial-3', time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
+    { id: 'initial-1', time: getGstTimeStr(-120000), message: 'SYS: JIAMD NODE INITIALIZED', type: 'INFO', acknowledged: true },
+    { id: 'initial-2', time: getGstTimeStr(-90000), message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
+    { id: 'initial-3', time: getGstTimeStr(-60000), message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
+    { id: 'initial-4', time: getGstTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
   const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
@@ -707,6 +727,7 @@ export default function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
+  const [mouseCoords, setMouseCoords] = useState<{x: number, y: number}>({ x: 0, y: 0 });
   const simTimeRef = useRef(0);
 
   const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
@@ -750,8 +771,7 @@ export default function App() {
   }, [splashes.length]);
 
   const addLog = useCallback((message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
-    const now = new Date();
-    const timeStr = now.toISOString().substring(11, 19) + 'Z';
+    const timeStr = getGstTimeStr();
     const logId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     setLogs(prev => [{ id: logId, time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
   }, []);
@@ -982,7 +1002,8 @@ export default function App() {
                         
                         setInterceptorsFired(prev => ({ ...prev, 'TAMIR': prev['TAMIR'] + 1 }));
                         
-                        events.push({ type: 'LOG', message: `TAMIR AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
+                        const costStr = WEAPON_STATS['TAMIR'].cost >= 1000000 ? `$${(WEAPON_STATS['TAMIR'].cost / 1000000).toFixed(1)}M` : `$${Math.round(WEAPON_STATS['TAMIR'].cost / 1000)}K`;
+                        events.push({ type: 'LOG', message: `TAMIR AUTO-ENGAGE TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
                         events.push({ type: 'COST', amount: WEAPON_STATS['TAMIR'].cost });
                         
                         const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['TAMIR'].speedMach);
@@ -1020,7 +1041,8 @@ export default function App() {
                       const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y);
                       if (rngToAsset <= 2.5) {
                         setInterceptorsFired(prev => ({ ...prev, 'C-RAM': prev['C-RAM'] + 1 }));
-                        events.push({ type: 'LOG', message: `CIWS (${asset.id}) ENGAGING LEAKER TRK ${t.id}`, logType: 'ACTION' });
+                        const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
+                        events.push({ type: 'LOG', message: `CIWS (${asset.id}) ENGAGING LEAKER TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
                         events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
                         
                         const closureRate = calculateClosureRate({x: asset.x, y: asset.y}, t, WEAPON_STATS['C-RAM'].speedMach);
@@ -1158,8 +1180,10 @@ export default function App() {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const coords = getMapCoords(e, e.currentTarget);
+    setMouseCoords(coords);
+
     if (draggingWaypointId) {
-      const coords = getMapCoords(e, e.currentTarget);
       setTracks(current => current.map(t => 
         t.id === draggingWaypointId ? { ...t, targetWaypoint: coords, patrolWaypoint: coords } : t
       ));
@@ -1374,8 +1398,9 @@ export default function App() {
           [weapon]: prev[weapon] + shotsToTake
         }));
         
+        const costStr = stats.cost >= 1000000 ? `$${(stats.cost / 1000000).toFixed(1)}M` : `$${Math.round(stats.cost / 1000)}K`;
         setDefenseCost(prev => prev + (stats.cost * shotsToTake));
-        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
+        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon} (-${costStr})`, 'ACTION');
         
         const missileSpdNmSec = weapon === "THAAD" ? 1.5 : (weapon === "PAC-3" ? 0.7 : 0.5); // Mach 8 vs Mach 4 vs Mach 3
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
@@ -1509,6 +1534,27 @@ export default function App() {
 
           <FighterWaypoints cameraZoom={camera.zoom} setDraggingWaypointId={setDraggingWaypointId} />
 
+          {/* Render Ghost Vector Line */}
+          {vectoringTrackId && (
+            (() => {
+              const track = useTrackStore.getState().getTrack(vectoringTrackId);
+              if (!track) return null;
+              return (
+                <g>
+                  <line 
+                    x1={track.x} y1={track.y} 
+                    x2={mouseCoords.x} y2={mouseCoords.y} 
+                    stroke="#00E5FF" 
+                    strokeWidth={0.2 / camera.zoom} 
+                    strokeDasharray={`${0.5 / camera.zoom} ${0.5 / camera.zoom}`} 
+                    className="animate-pulse"
+                  />
+                  <circle cx={mouseCoords.x} cy={mouseCoords.y} r={1 / camera.zoom} fill="none" stroke="#00E5FF" strokeWidth={0.1 / camera.zoom} className="animate-ping" />
+                </g>
+              );
+            })()
+          )}
+
           {/* Render Splashes */}
           {splashes.map(s => (
             <g key={s.id} transform={`translate(${s.x}, ${s.y})`}>
@@ -1570,7 +1616,7 @@ export default function App() {
                     {unackAlerts.length} UNACK ALERTS
                   </div>
                 )}
-                <span className="text-[#00E5FF]">ZULU: <SystemClock /></span>
+                <span className="text-[#00E5FF]">SECTOR: <SystemClock /></span>
               </div>
             </header>
       
