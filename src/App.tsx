@@ -1061,30 +1061,43 @@ export default function App() {
           <DefendedAssets cameraZoom={camera.zoom} />
 
           {/* Render waypoints and lines for fighters */}
-          {tracks.filter(t => t.isFighter && t.targetWaypoint).map(t => (
+          {tracks.filter(t => t.isFighter).map(t => (
             <g key={`wp-${t.id}`}>
-              <line 
-                x1={t.x} y1={t.y} 
-                x2={t.targetWaypoint!.x} y2={t.targetWaypoint!.y} 
-                stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} strokeDasharray={`${1 / camera.zoom} ${1 / camera.zoom}`} opacity="0.5" 
-              />
-              {/* Invisible larger hit area for easier dragging */}
-              <circle 
-                cx={t.targetWaypoint!.x} cy={t.targetWaypoint!.y} 
-                r={2 / camera.zoom} 
-                fill="transparent" 
-                className="cursor-move pointer-events-auto"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  setDraggingWaypointId(t.id);
-                }}
-              />
-              {/* Crosshair symbol */}
-              <g transform={`translate(${t.targetWaypoint!.x}, ${t.targetWaypoint!.y})`} pointerEvents="none">
-                <line x1={-0.8 / camera.zoom} y1={0} x2={0.8 / camera.zoom} y2={0} stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} />
-                <line x1={0} y1={-0.8 / camera.zoom} x2={0} y2={0.8 / camera.zoom} stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} />
-              </g>
-              {t.isRTB && (
+              {/* Actual flight path line */}
+              {t.targetWaypoint && (
+                <line 
+                  x1={t.x} y1={t.y} 
+                  x2={t.targetWaypoint.x} y2={t.targetWaypoint.y} 
+                  stroke={t.isRTB ? "#FFCC00" : (t.crankingTargetId ? "#FF00FF" : "#00E5FF")} 
+                  strokeWidth={0.2 / camera.zoom} 
+                  strokeDasharray={`${1 / camera.zoom} ${1 / camera.zoom}`} 
+                  opacity="0.5" 
+                />
+              )}
+
+              {/* User's Patrol Waypoint (Draggable Crosshair) */}
+              {t.patrolWaypoint && !t.isRTB && (
+                <g>
+                  {/* Invisible larger hit area for easier dragging */}
+                  <circle 
+                    cx={t.patrolWaypoint.x} cy={t.patrolWaypoint.y} 
+                    r={2 / camera.zoom} 
+                    fill="transparent" 
+                    className="cursor-move pointer-events-auto"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      setDraggingWaypointId(t.id);
+                    }}
+                  />
+                  {/* Crosshair symbol */}
+                  <g transform={`translate(${t.patrolWaypoint.x}, ${t.patrolWaypoint.y})`} pointerEvents="none">
+                    <line x1={-0.8 / camera.zoom} y1={0} x2={0.8 / camera.zoom} y2={0} stroke="#00E5FF" strokeWidth={0.2 / camera.zoom} />
+                    <line x1={0} y1={-0.8 / camera.zoom} x2={0} y2={0.8 / camera.zoom} stroke="#00E5FF" strokeWidth={0.2 / camera.zoom} />
+                  </g>
+                </g>
+              )}
+
+              {t.isRTB && t.targetWaypoint && (
                 <text x={t.x + 1} y={t.y - 1} fill="#FFCC00" fontSize={0.7 / camera.zoom} fontFamily="monospace" fontWeight="bold">
                   RTB
                 </text>
