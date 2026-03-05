@@ -837,7 +837,7 @@ export default function App() {
     const clockTimer = setInterval(() => {
       simTimeRef.current += 1;
 
-      if (simTimeRef.current >= 270) {
+      if (simTimeRef.current >= 350) {
         setIsGameOver(true);
       }
 
@@ -996,6 +996,9 @@ export default function App() {
             } else if (track.category === 'CM') {
               // Cruise Missile: Sea-skimming terrain following
               newAlt = Math.max(50, 100 + (Math.random() * 40 - 20)); // Jitter between 80-120ft
+            } else if (track.category === 'ROCKET') {
+              // Rocket Salvo: Fast, unguided, steady descent
+              newAlt = Math.max(0, newAlt - 50); 
             } else if (track.category === 'UAS') {
               // Drone Swarm: Slight altitude and heading weave to complicate targeting
               newAlt = Math.max(100, track.alt + (Math.random() * 20 - 10));
@@ -1038,7 +1041,7 @@ export default function App() {
                 // 4.5 Automatic TAMIR Point Defense (Weapons Free)
                 let currentTamir = inventoryRef.current.tamir;
                 nextTracks = nextTracks.map(t => {
-                  if (isAutoTamirRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && t.category !== 'FW' && t.category !== 'RW' && t.alt <= 30000 && currentTamir > 0) {
+                  if (isAutoTamirRef.current && t.type === 'HOSTILE' && (t.category === 'UAS' || t.category === 'ROCKET') && t.alt <= 30000 && currentTamir > 0) {
                     const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
                     // Check if within 35NM TAMIR (Iron Dome) WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;

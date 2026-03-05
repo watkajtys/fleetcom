@@ -1,5 +1,5 @@
 export type TrackType = 'PENDING' | 'UNKNOWN' | 'ASSUMED_FRIEND' | 'FRIEND' | 'NEUTRAL' | 'SUSPECT' | 'HOSTILE';
-export type TrackCategory = 'FW' | 'RW' | 'UAS' | 'CM' | 'TBM';
+export type TrackCategory = 'FW' | 'RW' | 'UAS' | 'CM' | 'TBM' | 'ROCKET';
 
 export interface Interceptor {
   id: string; // Unique ID for the missile

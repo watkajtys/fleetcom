@@ -30,6 +30,7 @@ export const createTargetTrack = (
   if (category === 'UAS') prefix = 'U';
   if (category === 'CM') prefix = 'C';
   if (category === 'TBM') prefix = 'B';
+  if (category === 'ROCKET') prefix = 'R';
 
   const rangeToBattery = distanceNm;
   const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(alt));
@@ -169,6 +170,19 @@ export const MISSION_STEPS: MissionEvent[] = [
     ))
   },
   {
+    time: 155,
+    message: 'WARNING RED. INBOUND ROCKET SALVO DETECTED. ESTIMATED IMPACT DUBAI 45 SECONDS.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 8}).map(() => createTargetTrack(
+      'PENDING', 'ROCKET',
+      330 + Math.random() * 10,
+      40 + Math.random() * 5,
+      1200 + Math.random() * 100,
+      5000 + Math.random() * 2000,
+      'LCL'
+    ))
+  },
+  {
     time: 170,
     message: 'WARNING RED. SWARM WAVE 2. MASSIVE UAS FORMATION EMERGING FROM CLUTTER. SATURATION ATTACK IMMINENT.',
     type: 'ALERT',
@@ -185,6 +199,15 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'HUNTRESS: FINAL WAVE OF SWARM 2 CLEARING RADAR HORIZON.',
     type: 'WARN',
     generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'UAS', 350 + Math.random() * 10, 77 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
+  },
+  {
+    time: 200,
+    message: 'WARNING RED. SECOND ROCKET SALVO DETECTED. MULTIPLE SECTORS.',
+    type: 'ALERT',
+    generateTracks: () => [
+      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'ROCKET', 310 + Math.random() * 10, 35 + Math.random() * 5, 1200, 4000, 'LCL')),
+      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'ROCKET', 10 + Math.random() * 10, 35 + Math.random() * 5, 1200, 4000, 'LCL'))
+    ]
   },
   {
     time: 210,
@@ -210,6 +233,19 @@ export const MISSION_STEPS: MissionEvent[] = [
       480 + Math.random() * 20, // Fast
       100 + Math.random() * 50, // Sea-skimming
       'L16'
+    ))
+  },
+  {
+    time: 280,
+    message: 'INTEL: FINAL ATTACK WAVE DETECTED. LARGE VOLUME UNKNOWN CATEGORY.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 15}).map(() => createTargetTrack(
+      'PENDING', Math.random() > 0.5 ? 'ROCKET' : 'UAS',
+      270 + Math.random() * 180,
+      50 + Math.random() * 10,
+      800 + Math.random() * 400,
+      2000 + Math.random() * 5000,
+      'LCL'
     ))
   }
 ];
