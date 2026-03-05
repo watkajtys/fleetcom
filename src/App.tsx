@@ -605,9 +605,11 @@ export default function App() {
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
     { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
-  const [inventory, setInventory] = useState({ pac3: 64, shorad: 64, thaad: 24 });
+  const [inventory, setInventory] = useState({ pac3: 32, shorad: 24, thaad: 8 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
+  const [isAutoShorad, setIsAutoShorad] = useState(false);
+  const [salvoMode, setSalvoMode] = useState(false);
   const simTimeRef = useRef(0);
 
   // Camera State
@@ -802,30 +804,40 @@ export default function App() {
                   return track;
                 });
         
-                // 4.5 Automatic SHORAD Point Defense (Weapons Free for close-in UAS)
+                // 4.5 Automatic SHORAD Point Defense (Weapons Free)
                 let currentShorad = inventoryRef.current.shorad;
                 nextTracks = nextTracks.map(t => {
-                  if (t.type === 'HOSTILE' && t.category === 'UAS' && currentShorad > 0) {
+                  if (isAutoShoradRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && currentShorad > 0) {
                     const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
                     // Check if within 5NM SHORAD WEZ and not already being shot at by Battery
-                    if (rng <= 5.0 && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'BATTERY'))) {
-                      currentShorad--;
-                      events.push({ type: 'LOG', message: `SHORAD AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
-                      events.push({ type: 'COST', amount: WEAPON_STATS['SHORAD'].cost });
+                    const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
+                    const requiredMissiles = salvoModeRef.current ? 2 : 1;
+
+                    if (rng <= 5.0 && existingBatteryMissiles < requiredMissiles) {
+                      const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentShorad);
                       
-                      const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['SHORAD'].speedMach);
-                      const interceptTimeSecs = rng / Math.max(0.1, closureRate);
+                      let newInterceptors = [];
+                      for (let i = 0; i < shotsToTake; i++) {
+                        currentShorad--;
+                        events.push({ type: 'LOG', message: `SHORAD AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
+                        events.push({ type: 'COST', amount: WEAPON_STATS['SHORAD'].cost });
+                        
+                        const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['SHORAD'].speedMach);
+                        // Stagger intercept times slightly for visual clarity on double taps
+                        const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (i * 0.5); 
+                        
+                        newInterceptors.push({
+                          id: `SHORAD-AUTO-${Date.now()}-${Math.random()}`,
+                          weapon: 'SHORAD' as const,
+                          shooterId: 'BATTERY',
+                          launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
+                          engagementTime: Date.now() + (i * 500), // Physical launch stagger
+                          interceptDuration: interceptTimeSecs * 1000,
+                          interceptTtl: Math.ceil(interceptTimeSecs)
+                        });
+                      }
                       
-                      const newInterceptor = {
-                        id: `SHORAD-AUTO-${Date.now()}-${Math.random()}`,
-                        weapon: 'SHORAD' as const,
-                        shooterId: 'BATTERY',
-                        launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
-                        engagementTime: Date.now(),
-                        interceptDuration: interceptTimeSecs * 1000,
-                        interceptTtl: Math.ceil(interceptTimeSecs)
-                      };
-                      return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+                      return { ...t, interceptors: [...(t.interceptors || []), ...newInterceptors] };
                     }
                   }
                   return t;
@@ -1103,61 +1115,65 @@ export default function App() {
     let currentShorad = inventory.shorad;
     let currentThaad = inventory.thaad;
 
+    const requiredShots = salvoMode ? 2 : 1;
+
     hookedTrackIds.forEach((id, index) => {
       const target = useTrackStore.getState().getTrack(id);
-      if (!target || target.type !== 'HOSTILE' || (target.interceptors && target.interceptors.length >= 2)) return;
+      if (!target || target.type !== 'HOSTILE') return;
+
+      const existingShots = target.interceptors ? target.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
+      if (existingShots >= requiredShots) return; // Already engaged with sufficient doctrine
+
+      const shotsToTake = Math.min(requiredShots - existingShots, weapon === 'PAC-3' ? currentPac3 : weapon === 'SHORAD' ? currentShorad : currentThaad);
+      if (shotsToTake <= 0) return; // Out of ammo for this request
 
       const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
       if (rng > stats.range) return;
 
-      // Check magazine
-      if (weapon === 'PAC-3' && currentPac3 <= 0) return;
-      if (weapon === 'SHORAD' && currentShorad <= 0) return;
-      if (weapon === 'THAAD' && currentThaad <= 0) return;
-
       // Deduct from local count for this loop
-      if (weapon === 'PAC-3') currentPac3--;
-      if (weapon === 'SHORAD') currentShorad--;
-      if (weapon === 'THAAD') currentThaad--;
+      if (weapon === 'PAC-3') currentPac3 -= shotsToTake;
+      if (weapon === 'SHORAD') currentShorad -= shotsToTake;
+      if (weapon === 'THAAD') currentThaad -= shotsToTake;
 
       // Stagger launches
       setTimeout(() => {
         setInventory(prev => ({
           ...prev,
-          pac3: weapon === 'PAC-3' ? prev.pac3 - 1 : prev.pac3,
-          shorad: weapon === 'SHORAD' ? prev.shorad - 1 : prev.shorad,
-          thaad: weapon === 'THAAD' ? prev.thaad - 1 : prev.thaad,
+          pac3: weapon === 'PAC-3' ? prev.pac3 - shotsToTake : prev.pac3,
+          shorad: weapon === 'SHORAD' ? prev.shorad - shotsToTake : prev.shorad,
+          thaad: weapon === 'THAAD' ? prev.thaad - shotsToTake : prev.thaad,
         }));
         
-        setDefenseCost(prev => prev + stats.cost);
-        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
+        setDefenseCost(prev => prev + (stats.cost * shotsToTake));
+        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${shotsToTake} ${weapon}`, 'ACTION');
         
         const missileSpdNmSec = weapon === "THAAD" ? 1.5 : (weapon === "PAC-3" ? 0.7 : 0.5); // Mach 8 vs Mach 4 vs Mach 3
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
         
-        const interceptTimeSecs = rng / Math.max(0.1, closureRate);
-        const interceptTimeMs = interceptTimeSecs * 1000;
-
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
 
         setTracks(current => current.map(t => {
           if (t.id === id) {
-            const newInterceptor = {
-              id: `${weapon}-${Date.now()}-${Math.random()}`,
-              weapon,
-              shooterId: 'BATTERY',
-              launchPos,
-              engagementTime: Date.now(),
-              interceptDuration: interceptTimeMs,
-              interceptTtl: Math.ceil(interceptTimeSecs)
-            };
-            return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+            const newInterceptors = [];
+            for (let i = 0; i < shotsToTake; i++) {
+               const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (i * 0.5);
+               newInterceptors.push({
+                 id: `${weapon}-${Date.now()}-${Math.random()}`,
+                 weapon,
+                 shooterId: 'BATTERY',
+                 launchPos,
+                 engagementTime: Date.now() + (i * 500),
+                 interceptDuration: interceptTimeSecs * 1000,
+                 interceptTtl: Math.ceil(interceptTimeSecs)
+               });
+            }
+            return { ...t, interceptors: [...(t.interceptors || []), ...newInterceptors] };
           }
           return t;
         }));
       }, index * 500);
     });
-  }, [hookedTrackIds, inventory]);
+  }, [hookedTrackIds, inventory, salvoMode]);
 
   const handleAckAlerts = useCallback(() => {
     setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
@@ -1165,11 +1181,15 @@ export default function App() {
 
   const unackAlertsRef = useRef(unackAlerts);
   const inventoryRef = useRef(inventory);
+  const isAutoShoradRef = useRef(isAutoShorad);
+  const salvoModeRef = useRef(salvoMode);
 
   useEffect(() => {
     unackAlertsRef.current = unackAlerts;
     inventoryRef.current = inventory;
-  }, [unackAlerts, inventory]);
+    isAutoShoradRef.current = isAutoShorad;
+    salvoModeRef.current = salvoMode;
+  }, [unackAlerts, inventory, isAutoShorad, salvoMode]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1282,9 +1302,25 @@ export default function App() {
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
             <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className="text-[#00E5FF]">TIGHT</span></span>
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-            <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/24</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/64</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/64</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/24</span></span>
+            <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
+            
+            {/* Toggles */}
+            <button 
+              onClick={() => setIsAutoShorad(p => !p)} 
+              className={`px-2 transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+            >
+              AUTO-SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
+            </button>
+            <button 
+              onClick={() => setSalvoMode(p => !p)} 
+              className={`px-2 transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+            >
+              DOCTRINE: {salvoMode ? 'SALVO (2)' : 'SINGLE (1)'}
+            </button>
+
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
             <span className="text-[#FFCC00] whitespace-nowrap">DEFENSE COST: <span className="text-[#00E5FF]">${(defenseCost / 1000000).toFixed(2)}M</span></span>
             <span className="text-[#FFCC00] whitespace-nowrap">ENEMY COST: <span className="text-[#FF0033]">${(enemyCost / 1000000).toFixed(2)}M</span></span>
