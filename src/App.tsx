@@ -880,7 +880,7 @@ export default function App() {
                 // 4.5 Automatic TAMIR Point Defense (Weapons Free)
                 let currentTamir = inventoryRef.current.tamir;
                 nextTracks = nextTracks.map(t => {
-                  if (isAutoTamirRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && t.alt <= 30000 && currentTamir > 0) {
+                  if (isAutoTamirRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && t.category !== 'FW' && t.category !== 'RW' && t.alt <= 30000 && currentTamir > 0) {
                     const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
                     // Check if within 35NM TAMIR (Iron Dome) WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
@@ -1233,6 +1233,10 @@ export default function App() {
         if (weapon === 'TAMIR') {
           if (target.category === 'TBM') {
             addLog(`TAMIR CANNOT ENGAGE TBM (OUT OF ENVELOPE)`, 'WARN');
+            return;
+          }
+          if (target.category === 'FW' || target.category === 'RW') {
+            addLog(`TAMIR CANNOT ENGAGE AIRCRAFT (RESTRICTED DOCTRINE)`, 'WARN');
             return;
           }
           if (target.alt > 30000) {
