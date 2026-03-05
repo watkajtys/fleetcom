@@ -107,7 +107,7 @@ export const processFighters = (
         const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
         const interceptTimeMs = interceptTimeSecs * 1000;
 
-        events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}. Skinned.`, logType: 'ACTION' });
+        events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
         events.push({ type: 'COST', amount: 1200000 });
 
         // Note: The actual interceptor injection happens in App.tsx to avoid mutating state deeply here,
