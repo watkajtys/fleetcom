@@ -658,6 +658,8 @@ export default function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const simTimeRef = useRef(0);
 
   const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
@@ -1526,23 +1528,38 @@ export default function App() {
         </div>
       </header>
 
-      {/* --- MAIN CONTENT AREA --- */}
-      <main className="flex-1 flex justify-between p-4 z-20 pointer-events-none overflow-hidden">
-        
-        {/* LEFT PANEL: Track List & Logs */}
-        <div className="flex flex-col gap-4 w-[280px] pointer-events-auto h-full">
-          
-          {/* Track Summary Table */}
-          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
-
-          {/* System Event Log */}
-          <SystemEventLog logs={logs} />
-        </div>
-
-        {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoTamir={isAutoTamir} setIsAutoTamir={setIsAutoTamir} filters={filters} setFilters={setFilters} />
-      </main>
-
+            {/* --- MAIN CONTENT AREA --- */}
+            <main className="flex-1 flex justify-between p-4 z-20 pointer-events-none overflow-hidden relative">
+              
+              {/* LEFT PANEL: Track List & Logs */}
+              <div className={`flex flex-col gap-4 w-[280px] pointer-events-auto h-full transition-transform duration-300 relative ${isLeftPanelCollapsed ? '-translate-x-[290px]' : 'translate-x-0'}`}>
+                <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
+                <SystemEventLog logs={logs} />
+                
+                {/* Collapse Toggle Button (Left) */}
+                <button 
+                  onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+                  className="absolute -right-6 top-1/2 -translate-y-1/2 w-6 h-16 bg-[#001A26]/80 border border-[#004466] border-l-0 text-[#00E5FF] flex items-center justify-center hover:bg-[#002B40] transition-colors"
+                  style={{ clipPath: 'polygon(0 0, 100% 20%, 100% 80%, 0 100%)' }}
+                >
+                  <span className="text-[10px] transform rotate-90 lg:rotate-0">{isLeftPanelCollapsed ? '>>' : '<<'}</span>
+                </button>
+              </div>
+      
+              {/* RIGHT PANEL: Tote (Hooked Track Data) */}
+              <div className={`pointer-events-auto h-full transition-transform duration-300 relative ${isRightPanelCollapsed ? 'translate-x-[310px]' : 'translate-x-0'}`}>
+                <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoTamir={isAutoTamir} setIsAutoTamir={setIsAutoTamir} filters={filters} setFilters={setFilters} />
+                
+                {/* Collapse Toggle Button (Right) */}
+                <button 
+                  onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
+                  className="absolute -left-6 top-1/2 -translate-y-1/2 w-6 h-16 bg-[#001A26]/80 border border-[#004466] border-r-0 text-[#00E5FF] flex items-center justify-center hover:bg-[#002B40] transition-colors"
+                  style={{ clipPath: 'polygon(100% 0, 0 20%, 0 80%, 100% 100%)' }}
+                >
+                  <span className="text-[10px] transform rotate-90 lg:rotate-0">{isRightPanelCollapsed ? '<<' : '>>'}</span>
+                </button>
+              </div>
+            </main>
       {/* --- BOTTOM SOFT KEY BAR --- */}
       <footer className="h-16 bg-[#00050A]/95 border-t border-[#002B40] flex items-center px-2 lg:px-4 gap-1 lg:gap-2 z-20 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
