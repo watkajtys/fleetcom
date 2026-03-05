@@ -414,7 +414,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoShorad, setIsAutoShorad, salvoMode, setSalvoMode, filters, setFilters }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoShorad: boolean, setIsAutoShorad: React.Dispatch<React.SetStateAction<boolean>>, salvoMode: boolean, setSalvoMode: React.Dispatch<React.SetStateAction<boolean>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
+const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoShorad, setIsAutoShorad, filters, setFilters }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoShorad: boolean, setIsAutoShorad: React.Dispatch<React.SetStateAction<boolean>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
   const tracksMap = useTrackStore(state => state.tracks);
   const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
 
@@ -566,12 +566,6 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                 >
                   SHORAD: {isAutoShorad ? 'WEAPONS FREE' : 'HOLD'}
                 </button>
-                <button 
-                  onClick={() => setSalvoMode(p => !p)} 
-                  className={`w-full py-2 text-xs font-bold tracking-widest transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-                >
-                  FIRE MODE: {salvoMode ? 'SALVO (2)' : 'SINGLE (1)'}
-                </button>
               </div>
             </div>
           </div>
@@ -648,7 +642,6 @@ export default function App() {
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoShorad, setIsAutoShorad] = useState(false);
-  const [salvoMode, setSalvoMode] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const simTimeRef = useRef(0);
 
@@ -1157,18 +1150,19 @@ export default function App() {
     let currentShorad = inventory.shorad;
     let currentThaad = inventory.thaad;
 
-    // SHORAD is strictly point-defense single-shot. Area defense can salvo.
-    const requiredShots = (salvoMode && weapon !== 'SHORAD') ? 2 : 1;
-
     hookedTrackIds.forEach((id, index) => {
       const target = useTrackStore.getState().getTrack(id);
       if (!target || target.type !== 'HOSTILE') return;
 
       const existingShots = target.interceptors ? target.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
-      if (existingShots >= requiredShots) return; // Already engaged with sufficient doctrine
+      if (existingShots >= 1) return; // Already engaged
 
-      const shotsToTake = Math.min(requiredShots - existingShots, weapon === 'PAC-3' ? currentPac3 : weapon === 'SHORAD' ? currentShorad : currentThaad);
-      if (shotsToTake <= 0) return; // Out of ammo for this request
+      const shotsToTake = 1;
+      
+      // Check ammo
+      if (weapon === 'PAC-3' && currentPac3 <= 0) return;
+      if (weapon === 'SHORAD' && currentShorad <= 0) return;
+      if (weapon === 'THAAD' && currentThaad <= 0) return;
 
       const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
       if (rng > stats.range) return;
@@ -1188,7 +1182,7 @@ export default function App() {
         }));
         
         setDefenseCost(prev => prev + (stats.cost * shotsToTake));
-        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${shotsToTake} ${weapon}`, 'ACTION');
+        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
         
         const missileSpdNmSec = weapon === "THAAD" ? 1.5 : (weapon === "PAC-3" ? 0.7 : 0.5); // Mach 8 vs Mach 4 vs Mach 3
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
@@ -1197,26 +1191,23 @@ export default function App() {
 
         setTracks(current => current.map(t => {
           if (t.id === id) {
-            const newInterceptors = [];
-            for (let i = 0; i < shotsToTake; i++) {
-               const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (i * 0.5);
-               newInterceptors.push({
-                 id: `${weapon}-${Date.now()}-${Math.random()}`,
-                 weapon,
-                 shooterId: 'BATTERY',
-                 launchPos,
-                 engagementTime: Date.now() + (i * 500),
-                 interceptDuration: interceptTimeSecs * 1000,
-                 interceptTtl: Math.ceil(interceptTimeSecs)
-               });
-            }
-            return { ...t, interceptors: [...(t.interceptors || []), ...newInterceptors] };
+             const interceptTimeSecs = (rng / Math.max(0.1, closureRate));
+             const newInterceptor = {
+               id: `${weapon}-${Date.now()}-${Math.random()}`,
+               weapon,
+               shooterId: 'BATTERY',
+               launchPos,
+               engagementTime: Date.now(),
+               interceptDuration: interceptTimeSecs * 1000,
+               interceptTtl: Math.ceil(interceptTimeSecs)
+             };
+            return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
           }
           return t;
         }));
       }, index * 500);
     });
-  }, [hookedTrackIds, inventory, salvoMode]);
+  }, [hookedTrackIds, inventory]);
 
   const handleAckAlerts = useCallback(() => {
     setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
@@ -1225,14 +1216,12 @@ export default function App() {
   const unackAlertsRef = useRef(unackAlerts);
   const inventoryRef = useRef(inventory);
   const isAutoShoradRef = useRef(isAutoShorad);
-  const salvoModeRef = useRef(salvoMode);
 
   useEffect(() => {
     unackAlertsRef.current = unackAlerts;
     inventoryRef.current = inventory;
     isAutoShoradRef.current = isAutoShorad;
-    salvoModeRef.current = salvoMode;
-  }, [unackAlerts, inventory, isAutoShorad, salvoMode]);
+  }, [unackAlerts, inventory, isAutoShorad]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1378,7 +1367,7 @@ export default function App() {
         </div>
 
         {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoShorad={isAutoShorad} setIsAutoShorad={setIsAutoShorad} salvoMode={salvoMode} setSalvoMode={setSalvoMode} filters={filters} setFilters={setFilters} />
+        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoShorad={isAutoShorad} setIsAutoShorad={setIsAutoShorad} filters={filters} setFilters={setFilters} />
       </main>
 
       {/* --- BOTTOM SOFT KEY BAR --- */}
