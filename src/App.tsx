@@ -293,7 +293,7 @@ const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
   </>
 ));
 
-const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filters }: { hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>>, filters: any }) => {
+const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filters, setFilters }: { hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
   const tracksMap = useTrackStore(state => state.tracks);
   const tracks = useMemo(() => Object.values(tracksMap).filter(t => {
     if (t.detected === false) return false;
@@ -306,9 +306,29 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
 
   return (
     <aside className="flex-1 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
-      <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center gap-2 shrink-0">
-        <span className="text-[#00E5FF] font-bold">[TRK]</span>
-        <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest">TRACK SUMMARY</h2>
+      <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[#00E5FF] font-bold">[TRK]</span>
+          <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest hidden lg:block">SUMMARY</h2>
+        </div>
+        <div className="flex gap-1">
+          <button 
+            onClick={() => setFilters((f: any) => ({ ...f, showHostiles: !f.showHostiles }))} 
+            className={`px-1.5 py-0.5 text-[9px] font-bold border ${filters.showHostiles ? 'text-[#FF0000] border-[#FF0000] bg-[#FF0000]/10' : 'text-[#FF0000]/30 border-[#002B40]'}`}
+          >H</button>
+          <button 
+            onClick={() => setFilters((f: any) => ({ ...f, showUnknowns: !f.showUnknowns }))} 
+            className={`px-1.5 py-0.5 text-[9px] font-bold border ${filters.showUnknowns ? 'text-[#FFFF00] border-[#FFFF00] bg-[#FFFF00]/10' : 'text-[#FFFF00]/30 border-[#002B40]'}`}
+          >P</button>
+          <button 
+            onClick={() => setFilters((f: any) => ({ ...f, showFriends: !f.showFriends }))} 
+            className={`px-1.5 py-0.5 text-[9px] font-bold border ${filters.showFriends ? 'text-[#00FF33] border-[#00FF33] bg-[#00FF33]/10' : 'text-[#00FF33]/30 border-[#002B40]'}`}
+          >F</button>
+          <button 
+            onClick={() => setFilters((f: any) => ({ ...f, showNeutrals: !f.showNeutrals }))} 
+            className={`px-1.5 py-0.5 text-[9px] font-bold border ${filters.showNeutrals ? 'text-[#00FFFF] border-[#00FFFF] bg-[#00FFFF]/10' : 'text-[#00FFFF]/30 border-[#002B40]'}`}
+          >N</button>
+        </div>
       </div>
       <div className="flex-1 overflow-auto custom-scrollbar">
         <table className="w-full text-[10px] text-left">
@@ -530,65 +550,32 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
             )}
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-[#002B40] space-y-4">
-            <div className="text-4xl font-light opacity-50">[ ]</div>
-            <p className="text-xs tracking-widest">NO TRACK HOOKED</p>
+          <div className="flex-1 flex flex-col p-2 space-y-6">
+            <div className="flex-1 flex flex-col items-center justify-center text-[#002B40] space-y-4">
+              <div className="text-4xl font-light opacity-50">[ ]</div>
+              <p className="text-xs tracking-widest">NO TRACK HOOKED</p>
+            </div>
+
+            {/* Battery Doctrine Controls (Empty State Only) */}
+            <div className="border border-[#002B40] bg-[#001A26]/50 p-3 flex flex-col gap-2">
+              <div className="text-[10px] text-[#004466] uppercase tracking-tighter">Global Doctrine</div>
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={() => setIsAutoShorad(p => !p)} 
+                  className={`w-full py-2 text-xs font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+                >
+                  SHORAD: {isAutoShorad ? 'WEAPONS FREE' : 'HOLD'}
+                </button>
+                <button 
+                  onClick={() => setSalvoMode(p => !p)} 
+                  className={`w-full py-2 text-xs font-bold tracking-widest transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+                >
+                  FIRE MODE: {salvoMode ? 'SALVO (2)' : 'SINGLE (1)'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Battery Doctrine Controls (Always Visible) */}
-      <div className="border-t border-[#002B40] bg-[#001A26]/50 p-3 mt-auto flex flex-col gap-3">
-        <div className="flex flex-col gap-2">
-          <div className="text-[10px] text-[#004466] uppercase tracking-tighter">Battery Doctrine</div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setIsAutoShorad(p => !p)} 
-              className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-            >
-              SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
-            </button>
-            <button 
-              onClick={() => setSalvoMode(p => !p)} 
-              className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-            >
-              FIRE: {salvoMode ? 'SALVO (2)' : 'SINGLE'}
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 pt-2 border-t border-[#002B40]/50">
-          <div className="text-[10px] text-[#004466] uppercase tracking-tighter flex justify-between">
-            <span>Map Filters</span>
-            <span className="text-[#00E5FF] opacity-50">DISPLAY</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button 
-              onClick={() => setFilters((f: any) => ({ ...f, showHostiles: !f.showHostiles }))} 
-              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showHostiles ? 'text-[#FF0000] border-[#FF0000] bg-[#FF0000]/10' : 'text-[#FF0000]/30 border-[#002B40] bg-transparent'}`}
-            >
-              HOSTILE
-            </button>
-            <button 
-              onClick={() => setFilters((f: any) => ({ ...f, showUnknowns: !f.showUnknowns }))} 
-              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showUnknowns ? 'text-[#FFFF00] border-[#FFFF00] bg-[#FFFF00]/10' : 'text-[#FFFF00]/30 border-[#002B40] bg-transparent'}`}
-            >
-              PENDING
-            </button>
-            <button 
-              onClick={() => setFilters((f: any) => ({ ...f, showFriends: !f.showFriends }))} 
-              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showFriends ? 'text-[#00FF33] border-[#00FF33] bg-[#00FF33]/10' : 'text-[#00FF33]/30 border-[#002B40] bg-transparent'}`}
-            >
-              FRIEND
-            </button>
-            <button 
-              onClick={() => setFilters((f: any) => ({ ...f, showNeutrals: !f.showNeutrals }))} 
-              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showNeutrals ? 'text-[#00FFFF] border-[#00FFFF] bg-[#00FFFF]/10' : 'text-[#00FFFF]/30 border-[#002B40] bg-transparent'}`}
-            >
-              NEUTRAL
-            </button>
-          </div>
-        </div>
       </div>
     </aside>
   );
@@ -1381,7 +1368,7 @@ export default function App() {
         <div className="flex flex-col gap-4 w-[280px] pointer-events-auto h-full">
           
           {/* Track Summary Table */}
-          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} />
+          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
 
           {/* System Event Log */}
           <SystemEventLog logs={logs} />
