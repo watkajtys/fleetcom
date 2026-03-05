@@ -23,21 +23,21 @@ export const DEFENDED_ASSETS = [
 // Scenario: Worst-Case Complex Coordinated Attack on Dubai
 export const INITIAL_TRACKS: Track[] = [
   // AWACS orbiting over inland UAE (High altitude, racetrack orbit)
-  { id: 'MAGIC-01', type: 'FRIEND', x: 67.5, y: 72.5, alt: 32000, spd: 350, hdg: 270, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'MAGIC-01', type: 'FRIEND', x: 60, y: 65, alt: 32000, spd: 350, hdg: 270, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Arrival Flow: UAE-992 on final approach to DWC (DAL-1)
-  { id: 'UAE-992', type: 'ASSUMED_FRIEND', x: 49, y: 71.5, alt: 3000, spd: 160, hdg: 315, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'UAE-992', type: 'ASSUMED_FRIEND', x: 47, y: 68, alt: 3000, spd: 160, hdg: 315, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Departure Flow: ETD-551 climbing out of DWC
-  { id: 'ETD-551', type: 'ASSUMED_FRIEND', x: 42.5, y: 65, alt: 8500, spd: 280, hdg: 280, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'ETD-551', type: 'ASSUMED_FRIEND', x: 42, y: 65, alt: 8500, spd: 280, hdg: 280, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // High-Altitude Corridor (Link-16 Datalink Tracks)
-  { id: 'QTR-115', type: 'ASSUMED_FRIEND', x: 32.5, y: 37.5, alt: 38000, spd: 480, hdg: 135, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
-  { id: 'BAW-107', type: 'ASSUMED_FRIEND', x: 70, y: 35, alt: 36000, spd: 470, hdg: 225, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'QTR-115', type: 'ASSUMED_FRIEND', x: 40, y: 45, alt: 38000, spd: 480, hdg: 135, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'BAW-107', type: 'ASSUMED_FRIEND', x: 60, y: 40, alt: 36000, spd: 470, hdg: 225, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Local Vectoring: FDB-22 assigned to a specific heading/altitude
-  { id: 'FDB-22', type: 'ASSUMED_FRIEND', x: 40, y: 50, alt: 14000, spd: 320, hdg: 45, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'FDB-22', type: 'ASSUMED_FRIEND', x: 45, y: 55, alt: 14000, spd: 320, hdg: 45, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Distant Traffic
-  { id: 'AIC-121', type: 'ASSUMED_FRIEND', x: 27.5, y: 55, alt: 34000, spd: 450, hdg: 90, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'AIC-121', type: 'ASSUMED_FRIEND', x: 35, y: 50, alt: 34000, spd: 450, hdg: 90, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
 ];
