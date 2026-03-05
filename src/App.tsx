@@ -339,14 +339,14 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
         </div>
       </div>
       <div className="flex-1 overflow-auto custom-scrollbar">
-        <table className="w-full text-[10px] text-left">
+        <table className="w-full text-[10px] text-left table-fixed">
           <thead className="text-[#004466] sticky top-0 bg-[#00050A]/50 border-b border-[#002B40] backdrop-blur-md">
             <tr>
-              <th className="py-2 px-3 font-normal">TRK</th>
-              <th className="py-2 px-2 font-normal">TYPE</th>
-              <th className="py-2 px-2 font-normal">CAT</th>
-              <th className="py-2 px-2 font-normal text-right">RNG</th>
-              <th className="py-2 px-3 font-normal text-right">ALT</th>
+              <th className="py-2 px-3 font-normal w-1/4">TRK</th>
+              <th className="py-2 px-2 font-normal w-1/4">TYPE</th>
+              <th className="py-2 px-2 font-normal w-1/6">CAT</th>
+              <th className="py-2 px-2 font-normal text-right w-1/6">RNG</th>
+              <th className="py-2 px-3 font-normal text-right w-1/6">ALT</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#001A26]">
@@ -371,11 +371,11 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
                     );
                   }}
                 >
-                  <td className="py-2 px-3 font-bold text-[#00E5FF]">{t.id}</td>
-                  <td className={`py-2 px-2 font-bold ${typeColor}`}>{t.threatName ? t.threatName.substring(0, 4).toUpperCase() : t.type.substring(0, 4)}</td>
-                  <td className="py-2 px-2 text-[#00E5FF]">{t.category}</td>
-                  <td className="py-2 px-2 text-[#00E5FF] text-right">{range.padStart(4, '0')}</td>
-                  <td className="py-2 px-3 text-[#00E5FF] text-right">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : Math.round(t.alt/100).toString().padStart(3, '0')}</td>
+                  <td className="py-2 px-3 font-bold text-[#00E5FF] truncate">{t.id}</td>
+                  <td className={`py-2 px-2 font-bold ${typeColor} truncate`}>{t.threatName ? t.threatName.substring(0, 4).toUpperCase() : t.type.substring(0, 4)}</td>
+                  <td className="py-2 px-2 text-[#00E5FF] truncate">{t.category}</td>
+                  <td className="py-2 px-2 text-[#00E5FF] text-right tabular-nums">{range.padStart(4, '0')}</td>
+                  <td className="py-2 px-3 text-[#00E5FF] text-right tabular-nums">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : Math.round(t.alt/100).toString().padStart(3, '0')}</td>
                 </tr>
               );
             })}
@@ -396,7 +396,7 @@ const SystemClock = React.memo(() => {
     return () => clearInterval(timer);
   }, []);
 
-  return <span className="text-[#00E5FF]">{time}</span>;
+  return <span className="text-[#00E5FF] tabular-nums">{time}</span>;
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
@@ -409,7 +409,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
       <div className="flex-1 overflow-auto p-3 space-y-1.5 flex flex-col-reverse custom-scrollbar">
         {logs.map((log) => (
           <div key={log.id} className={`text-[10px] flex gap-3 ${!log.acknowledged ? 'bg-[#FF0033]/20 border border-[#FF0033] p-1' : ''}`}>
-            <span className="text-[#004466] shrink-0">{log.time}</span>
+            <span className="text-[#004466] text-[8px] tabular-nums shrink-0 mt-0.5">{log.time}</span>
             <span className={`${
               log.type === 'ALERT' ? 'text-[#FF0033] font-bold' :
               log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' :
@@ -493,12 +493,12 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                 </div>
 
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">HDG / SPD</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold tabular-nums">
                   {Math.round(hookedTrack.hdg).toString().padStart(3, '0')} / {Math.round(hookedTrack.spd).toString().padStart(4, '0')}
                 </div>
                 
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">ALTITUDE</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold tabular-nums">
                   {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : hookedTrack.alt.toString().padStart(5, '0')} FT
                 </div>
 
@@ -506,7 +506,7 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                   <span>BRG / RNG</span>
                   <span className="text-[9px] opacity-50">BULLSEYE</span>
                 </div>
-                <div className="p-2 text-right text-[#00E5FF] font-bold flex flex-col">
+                <div className="p-2 text-right text-[#00E5FF] font-bold flex flex-col tabular-nums">
                   <span>{brg} / {rng} NM</span>
                   <span className="text-[9px] text-[#00FFFF] opacity-80">{bullBrg} / {bullRng} NM</span>
                 </div>
@@ -1558,12 +1558,11 @@ export default function App() {
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
                   <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
-                  <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-                  <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
-                  <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
-                  <span className="text-[#00FF33] whitespace-nowrap">TAMIR: <span className="text-[#00E5FF]">{inventory.tamir}/120</span></span>
-                  <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
-                </div>
+                              <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
+                              <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF] tabular-nums">{inventory.thaad}/8</span></span>
+                              <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF] tabular-nums">{inventory.pac3}/32</span></span>
+                              <span className="text-[#00FF33] whitespace-nowrap">TAMIR: <span className="text-[#00E5FF] tabular-nums">{inventory.tamir}/120</span></span>
+                              <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>                </div>
               </div>
               <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
                 {unackAlerts.length > 0 && (
