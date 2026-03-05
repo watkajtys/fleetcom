@@ -16,30 +16,48 @@ import AfterActionReport from './AfterActionReport';
 const nowStore = {
   now: Date.now(),
   mouseCoords: { x: 0, y: 0 },
-  listeners: new Set<() => void>(),
+  timeListeners: new Set<() => void>(),
+  mouseListeners: new Set<() => void>(),
   rafId: 0,
-  subscribe: (listener: () => void) => {
-    nowStore.listeners.add(listener);
-    if (nowStore.listeners.size === 1) {
+  
+  subscribeTime: (listener: () => void) => {
+    nowStore.timeListeners.add(listener);
+    if (nowStore.timeListeners.size === 1 && nowStore.mouseListeners.size === 0) {
       nowStore.start();
     }
     return () => {
-      nowStore.listeners.delete(listener);
-      if (nowStore.listeners.size === 0) {
+      nowStore.timeListeners.delete(listener);
+      if (nowStore.timeListeners.size === 0 && nowStore.mouseListeners.size === 0) {
         nowStore.stop();
       }
     };
   },
+
+  subscribeMouse: (listener: () => void) => {
+    nowStore.mouseListeners.add(listener);
+    if (nowStore.mouseListeners.size === 1 && nowStore.timeListeners.size === 0) {
+      nowStore.start();
+    }
+    return () => {
+      nowStore.mouseListeners.delete(listener);
+      if (nowStore.timeListeners.size === 0 && nowStore.mouseListeners.size === 0) {
+        nowStore.stop();
+      }
+    };
+  },
+
   getSnapshot: () => nowStore.now,
   getMouseSnapshot: () => nowStore.mouseCoords,
+  
   updateMouse: (x: number, y: number) => {
     nowStore.mouseCoords = { x, y };
-    nowStore.listeners.forEach(l => l());
+    nowStore.mouseListeners.forEach(l => l());
   },
+
   start: () => {
     const tick = () => {
       nowStore.now = Date.now();
-      nowStore.listeners.forEach(l => l());
+      nowStore.timeListeners.forEach(l => l());
       nowStore.rafId = requestAnimationFrame(tick);
     };
     nowStore.rafId = requestAnimationFrame(tick);
@@ -50,11 +68,11 @@ const nowStore = {
 };
 
 function useNow() {
-  return useSyncExternalStore(nowStore.subscribe, nowStore.getSnapshot);
+  return useSyncExternalStore(nowStore.subscribeTime, nowStore.getSnapshot);
 }
 
 function useMouseCoords() {
-  return useSyncExternalStore(nowStore.subscribe, nowStore.getMouseSnapshot);
+  return useSyncExternalStore(nowStore.subscribeMouse, nowStore.getMouseSnapshot);
 }
 
 const getGstTimeStr = (offsetMs: number = 0) => {
