@@ -975,9 +975,8 @@ export default function App() {
           setHookedTrackIds([nearbyTracks[0].id]);
         }
       } else {
-        if (e.target === e.currentTarget || (e.target instanceof SVGElement && e.target.tagName === 'svg')) {
-          setHookedTrackIds([]);
-        }
+        // Clicking anywhere on the map that isn't a track immediately drops the selection
+        setHookedTrackIds([]);
       }
       
       setIsDragging(true);
