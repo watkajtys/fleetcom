@@ -605,7 +605,7 @@ export default function App() {
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
     { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
-  const [inventory, setInventory] = useState({ pac3: 32, shorad: 24, thaad: 8 });
+  const [inventory, setInventory] = useState({ pac3: 64, shorad: 64, thaad: 24 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
   const simTimeRef = useRef(0);
@@ -802,6 +802,39 @@ export default function App() {
                   return track;
                 });
         
+                // 4.5 Automatic SHORAD Point Defense (Weapons Free for close-in UAS)
+                let currentShorad = inventoryRef.current.shorad;
+                nextTracks = nextTracks.map(t => {
+                  if (t.type === 'HOSTILE' && t.category === 'UAS' && currentShorad > 0) {
+                    const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
+                    // Check if within 5NM SHORAD WEZ and not already being shot at by Battery
+                    if (rng <= 5.0 && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'BATTERY'))) {
+                      currentShorad--;
+                      events.push({ type: 'LOG', message: `SHORAD AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
+                      events.push({ type: 'COST', amount: WEAPON_STATS['SHORAD'].cost });
+                      
+                      const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['SHORAD'].speedMach);
+                      const interceptTimeSecs = rng / Math.max(0.1, closureRate);
+                      
+                      const newInterceptor = {
+                        id: `SHORAD-AUTO-${Date.now()}-${Math.random()}`,
+                        weapon: 'SHORAD' as const,
+                        shooterId: 'BATTERY',
+                        launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
+                        engagementTime: Date.now(),
+                        interceptDuration: interceptTimeSecs * 1000,
+                        interceptTtl: Math.ceil(interceptTimeSecs)
+                      };
+                      return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+                    }
+                  }
+                  return t;
+                });
+                
+                if (currentShorad !== inventoryRef.current.shorad) {
+                   setInventory(prev => ({ ...prev, shorad: currentShorad }));
+                }
+
                 // 5. Leaker Detection (Impacts on Dubai)
                 const impactedTrackIds = new Set<string>();
                 nextTracks.forEach(t => {
@@ -1249,9 +1282,9 @@ export default function App() {
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
             <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className="text-[#00E5FF]">TIGHT</span></span>
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-            <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/24</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/24</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/64</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/64</span></span>
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
             <span className="text-[#FFCC00] whitespace-nowrap">DEFENSE COST: <span className="text-[#00E5FF]">${(defenseCost / 1000000).toFixed(2)}M</span></span>
             <span className="text-[#FFCC00] whitespace-nowrap">ENEMY COST: <span className="text-[#FF0033]">${(enemyCost / 1000000).toFixed(2)}M</span></span>
