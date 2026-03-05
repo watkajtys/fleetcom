@@ -557,16 +557,15 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
             </div>
 
             {/* Battery Doctrine Controls (Empty State Only) */}
-            <div className="border border-[#002B40] bg-[#001A26]/50 p-3 flex flex-col gap-2">
-              <div className="text-[10px] text-[#004466] uppercase tracking-tighter">Global Doctrine</div>
-              <div className="flex flex-col gap-2">
-                <button 
-                  onClick={() => setIsAutoShorad(p => !p)} 
-                  className={`w-full py-2 text-xs font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-                >
-                  SHORAD: {isAutoShorad ? 'WEAPONS FREE' : 'HOLD'}
-                </button>
-              </div>
+            <div className="flex flex-col gap-2 mt-auto">
+              <div className="text-[10px] text-[#004466] font-bold whitespace-nowrap">GLOBAL DOCTRINE</div>
+              <button 
+                onClick={() => setIsAutoShorad(p => !p)} 
+                className={`h-10 px-4 flex flex-col items-center justify-center text-[10px] lg:text-xs font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]' : 'bg-[#001A26] border-[#004466] text-[#00E5FF] hover:bg-[#002B40]'}`}
+              >
+                <span className={`text-[8px] mb-0.5 ${isAutoShorad ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>8</span>
+                AUTO-SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
+              </button>
             </div>
           </div>
         )}
