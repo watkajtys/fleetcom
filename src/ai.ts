@@ -137,8 +137,8 @@ export const processFighters = (
           events.push({ type: 'LOG', message: `${track.id}: Intercepting TRACK ${bestTarget.id}.`, logType: 'INFO' });
         }
         
-        // Assume maximum intercept speed (1100 knots) for lead calculation
-        const leadPoint = calculateLeadInterceptPoint({x: track.x, y: track.y, spd: 1100}, bestTarget);
+        // Assume maximum intercept speed (1300 knots) for lead calculation
+        const leadPoint = calculateLeadInterceptPoint({x: track.x, y: track.y, spd: 1300}, bestTarget);
         
         return { ...track, targetWaypoint: leadPoint };
       }

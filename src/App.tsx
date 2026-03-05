@@ -616,16 +616,16 @@ export default function App() {
 
           if (track.isFighter) {
             // Dynamic Throttle
-            let targetSpd = 450; // Cruise
-            if (track.isRTB) targetSpd = 550;
-            else if (newTargetWaypoint) targetSpd = 1100; // Afterburner
+            let targetSpd = 500; // F-16E Desert Falcon Cruise
+            if (track.isRTB) targetSpd = 600;
+            else if (newTargetWaypoint) targetSpd = 1300; // Mach 2.0+ Intercept
 
             // Smooth speed transition
             if (newSpd < targetSpd) newSpd = Math.min(targetSpd, newSpd + 150);
             else if (newSpd > targetSpd) newSpd = Math.max(targetSpd, newSpd - 100);
 
             // Scramble climb
-            if (track.alt < 30000) newAlt = Math.min(30000, track.alt + 1500);
+            if (track.alt < 50000) newAlt = Math.min(50000, track.alt + 1500);
 
             // Maneuvering
             if (newTargetWaypoint) {
