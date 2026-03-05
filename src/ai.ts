@@ -1,5 +1,5 @@
 import { Track, TrackCategory } from './types';
-import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint, calculateCrankWaypoint } from './utils';
+import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint } from './utils';
 
 // We need to know where the battery/assets are to determine if a low-value target is a threat
 import { BATTERY_POS } from './constants';

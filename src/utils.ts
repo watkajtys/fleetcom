@@ -111,30 +111,3 @@ export const calculateLeadInterceptPoint = (
   };
 };
 
-// Calculates a waypoint 50NM away along a 50-degree offset from the target
-export const calculateCrankWaypoint = (
-  fighter: {x: number, y: number, hdg: number},
-  target: {x: number, y: number}
-): {x: number, y: number} => {
-  const bearingToTarget = calculateBearing(fighter.x, fighter.y, target.x, target.y);
-  
-  // Calculate which side is a smaller turn from current heading
-  let leftTurn = (fighter.hdg - 50 + 360) % 360;
-  let rightTurn = (fighter.hdg + 50) % 360;
-  
-  // Determine if target is to the left or right of current heading
-  let relativeBearing = bearingToTarget - fighter.hdg;
-  if (relativeBearing > 180) relativeBearing -= 360;
-  if (relativeBearing < -180) relativeBearing += 360;
-  
-  // Crank away from the target (if target is left, crank right)
-  const crankHdg = relativeBearing < 0 ? rightTurn : leftTurn;
-  
-  const radHdg = crankHdg * (Math.PI / 180);
-  
-  // Set a waypoint 50NM along the crank heading to keep the fighter moving that way
-  return {
-    x: fighter.x + Math.sin(radHdg) * 50,
-    y: fighter.y - Math.cos(radHdg) * 50
-  };
-};
