@@ -11,6 +11,7 @@ import { MISSION_STEPS } from './mission';
 import { processFighters } from './ai';
 import { useSyncExternalStore } from 'react';
 import BriefingModal from './BriefingModal';
+import AfterActionReport from './AfterActionReport';
 
 const nowStore = {
   now: Date.now(),
@@ -646,12 +647,16 @@ export default function App() {
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
   const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
+  const [destroyedAssetIds, setDestroyedAssetIds] = useState<string[]>([]);
+  const [leakerCount, setLeakerCount] = useState(0);
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoTamir, setIsAutoTamir] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
   const simTimeRef = useRef(0);
 
   const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
@@ -684,6 +689,16 @@ export default function App() {
     }
   }, [followedTrackId]);
 
+  useEffect(() => {
+    if (splashes.length > 0) {
+      const timer = setInterval(() => {
+        const now = Date.now();
+        setSplashes(prev => prev.filter(s => now - s.time < 2000));
+      }, 500);
+      return () => clearInterval(timer);
+    }
+  }, [splashes.length]);
+
   const addLog = useCallback((message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
     const now = new Date();
     const timeStr = now.toISOString().substring(11, 19) + 'Z';
@@ -697,6 +712,10 @@ export default function App() {
 
     const clockTimer = setInterval(() => {
       simTimeRef.current += 1;
+
+      if (simTimeRef.current >= 270) {
+        setIsGameOver(true);
+      }
 
       const event = MISSION_STEPS.find(e => e.time === simTimeRef.current);
       if (event) {
@@ -760,6 +779,11 @@ export default function App() {
         });
 
         // Remove splashed targets
+        nextTracks.forEach(t => {
+          if (destroyedTrackIds.has(t.id)) {
+            events.push({ type: 'SPLASH', x: t.x, y: t.y } as any);
+          }
+        });
         nextTracks = nextTracks.filter(t => !destroyedTrackIds.has(t.id));
 
         // Clean up completed interceptors (hits or misses) from surviving tracks
@@ -975,7 +999,7 @@ export default function App() {
                           message: `!!! IMPACT: ${asset.name} STRUCK BY ${t.id} !!!`, 
                           logType: 'ALERT' 
                         });
-                        events.push({ type: 'IMPACT', amount: 1 } as any);
+                        events.push({ type: 'IMPACT', assetId: asset.id } as any);
                       }
                     });
                   }
@@ -991,6 +1015,16 @@ export default function App() {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
         if (e.type === 'COST') setDefenseCost(prev => prev + e.amount!);
         if (e.type === 'AMRAAM_FIRED') setInterceptorsFired(prev => ({ ...prev, 'AMRAAM': prev['AMRAAM'] + 1 }));
+        if (e.type === 'IMPACT') {
+          setLeakerCount(prev => prev + 1);
+          const assetId = (e as any).assetId;
+          if (assetId) {
+            setDestroyedAssetIds(prev => prev.includes(assetId) ? prev : [...prev, assetId]);
+          }
+        }
+        if ((e as any).type === 'SPLASH') {
+          setSplashes(prev => [...prev, { id: `splash-${Date.now()}-${Math.random()}`, x: (e as any).x, y: (e as any).y, time: Date.now() }]);
+        }
       });
 
             setLastSweepTime(Date.now());
@@ -1387,6 +1421,15 @@ export default function App() {
   return (
     <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
       {!isGameStarted && <BriefingModal onStart={() => setIsGameStarted(true)} />}
+      {isGameOver && (
+        <AfterActionReport 
+          interceptorsFired={interceptorsFired}
+          leakerCount={leakerCount}
+          destroyedAssetIds={destroyedAssetIds}
+          defenseCost={defenseCost}
+          enemyCost={enemyCost}
+        />
+      )}
 
       {/* --- FULL SCREEN TACTICAL MAP BACKGROUND --- */}
       <div 
@@ -1408,6 +1451,15 @@ export default function App() {
           <DefendedAssets cameraZoom={camera.zoom} />
 
           <FighterWaypoints cameraZoom={camera.zoom} setDraggingWaypointId={setDraggingWaypointId} />
+
+          {/* Render Splashes */}
+          {splashes.map(s => (
+            <g key={s.id} transform={`translate(${s.x}, ${s.y})`}>
+              <circle r={2 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / cameraZoom} className="animate-ping" />
+              <line x1={-1 / camera.zoom} y1={-1 / camera.zoom} x2={1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / cameraZoom} />
+              <line x1={1 / camera.zoom} y1={-1 / camera.zoom} x2={-1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / cameraZoom} />
+            </g>
+          ))}
 
                     {trackIds.map(trackId => {
                       return (

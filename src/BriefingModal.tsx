@@ -47,7 +47,7 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
 
           <div className="space-y-4 text-sm leading-relaxed">
             <p>
-              <span className="text-[#00FFFF] font-bold">SITUATION:</span> You are assuming the shift as Tactical Director for the UAE Northern Emirates Air Defense Sector. It has been a quiet 48 hours. Civilian air traffic is operating normally along the Gulf corridor.
+              <span className="text-[#00FFFF] font-bold">SITUATION:</span> You are assuming the shift as Tactical Director for the UAE Northern Emirates Air Defense Sector. Regional batteries have been on high alert for 72 hours. It has been quiet for the past 6 hours, with civilian air traffic operating normally along the Gulf corridor.
             </p>
             <p>
               <span className="text-[#FF0033] font-bold">THREAT UPDATE:</span> Intelligence indicates a high probability of a coordinated, multi-domain strike by non-state actors targeting critical infrastructure in Dubai (Port Rashid, DWC, Burj Khalifa).
