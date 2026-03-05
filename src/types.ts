@@ -34,7 +34,6 @@ export interface Track {
   missilesRemaining?: number;
   targetWaypoint?: {x: number, y: number} | null;
   patrolWaypoint?: {x: number, y: number} | null;
-  crankingTargetId?: string | null;
 }
 
 export interface SystemLog {

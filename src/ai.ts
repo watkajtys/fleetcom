@@ -52,19 +52,6 @@ export const processFighters = (
       }
     });
 
-    // 3. Post-Launch Support (Simplified to Fire-and-Forget)
-    if (track.crankingTargetId) {
-      const crankTarget = trackMap.get(track.crankingTargetId);
-      const isMissileActive = crankTarget?.interceptors?.some(i => i.shooterId === track.id);
-      
-      if (!crankTarget || !isMissileActive) {
-        return { ...track, crankingTargetId: null, targetWaypoint: track.patrolWaypoint || null };
-      } else {
-        // Just return to patrol while missile is in flight
-        return { ...track, targetWaypoint: track.patrolWaypoint || null };
-      }
-    }
-
     // 4. Engagement Logic
     if ((track.missilesRemaining || 0) <= 0) return track;
 
@@ -142,7 +129,6 @@ export const processFighters = (
         return { 
           ...track, 
           missilesRemaining: track.missilesRemaining! - 1, 
-          crankingTargetId: targetId,
           targetWaypoint: track.patrolWaypoint || null
         };
       } else {
