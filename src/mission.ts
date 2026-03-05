@@ -125,22 +125,25 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'WARNING RED. SWARM WAVE 1 DETECTED SEAWARD. EVALUATED MIXED UAS/CM.',
     type: 'ALERT',
     generateTracks: () => [
-      ...Array.from({length: 10}).map(() => createTargetTrack(
-        'PENDING', 'UAS', 
-        315 + Math.random() * 30, 
-        60 + Math.random() * 10,  
-        100 + Math.random() * 15, 
-        200 + Math.random() * 300, 
-        'L16'
-      )),
-      ...Array.from({length: 4}).map(() => createTargetTrack(
-        'PENDING', 'CM', 
-        300 + Math.random() * 60, 
-        65 + Math.random() * 5,  
-        450 + Math.random() * 30, 
-        300 + Math.random() * 200, 
-        'L16'
-      ))
+      ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'UAS', 315 + Math.random() * 10, 60 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16')),
+      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'CM', 300 + Math.random() * 20, 65 + Math.random() * 2, 450 + Math.random() * 30, 300 + Math.random() * 200, 'L16'))
+    ]
+  },
+  {
+    time: 83,
+    message: 'HUNTRESS: ADDITIONAL FAST-MOVERS DETECTED IN SWARM 1.',
+    type: 'WARN',
+    generateTracks: () => [
+      ...Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'UAS', 325 + Math.random() * 10, 62 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16')),
+      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'CM', 320 + Math.random() * 20, 67 + Math.random() * 2, 450 + Math.random() * 30, 300 + Math.random() * 200, 'L16'))
+    ]
+  },
+  {
+    time: 86,
+    message: 'HUNTRESS: MORE SLOW-MOVERS EMERGING FROM CLUTTER.',
+    type: 'WARN',
+    generateTracks: () => [
+      ...Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'UAS', 335 + Math.random() * 10, 64 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
     ]
   },
   {
@@ -169,14 +172,31 @@ export const MISSION_STEPS: MissionEvent[] = [
     time: 170,
     message: 'WARNING RED. SWARM WAVE 2. MASSIVE UAS FORMATION EMERGING FROM CLUTTER. SATURATION ATTACK IMMINENT.',
     type: 'ALERT',
-    generateTracks: () => Array.from({length: 25}).map(() => createTargetTrack(
-      'PENDING', 'UAS', 
-      310 + Math.random() * 40, 
-      65 + Math.random() * 15,  
-      100 + Math.random() * 15, 
-      200 + Math.random() * 300, 
-      'L16'
-    ))
+    generateTracks: () => Array.from({length: 5}).map(() => createTargetTrack('PENDING', 'UAS', 310 + Math.random() * 10, 65 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
+  },
+  {
+    time: 173,
+    message: 'HUNTRESS: MORE BOGEYS POPPING UP. SWARM CONTINUES.',
+    type: 'WARN',
+    generateTracks: () => Array.from({length: 5}).map(() => createTargetTrack('PENDING', 'UAS', 320 + Math.random() * 10, 68 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
+  },
+  {
+    time: 176,
+    message: 'HUNTRESS: FIVE MORE TRACKS DETECTED LOW ALTITUDE.',
+    type: 'WARN',
+    generateTracks: () => Array.from({length: 5}).map(() => createTargetTrack('PENDING', 'UAS', 330 + Math.random() * 10, 71 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
+  },
+  {
+    time: 179,
+    message: 'HUNTRESS: STILL RAMPING UP. DO NOT COMMIT ALL AAM INVENTORY.',
+    type: 'WARN',
+    generateTracks: () => Array.from({length: 5}).map(() => createTargetTrack('PENDING', 'UAS', 340 + Math.random() * 10, 74 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
+  },
+  {
+    time: 182,
+    message: 'HUNTRESS: FINAL WAVE OF SWARM 2 CLEARING RADAR HORIZON.',
+    type: 'WARN',
+    generateTracks: () => Array.from({length: 5}).map(() => createTargetTrack('PENDING', 'UAS', 350 + Math.random() * 10, 77 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
   },
   {
     time: 210,
