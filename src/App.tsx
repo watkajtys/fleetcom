@@ -167,24 +167,24 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
     <pattern id="grid" width="5" height="5" patternUnits="userSpaceOnUse">
       <path d="M 5 0 L 0 0 0 5" fill="none" stroke="#001A26" strokeWidth={0.05 / cameraZoom}/>
     </pattern>
-    <rect width="100" height="100" fill="url(#grid)" />
+    <rect x="-500" y="-500" width="1000" height="1000" fill="url(#grid)" />
 
-    {/* Dubai Coastline & Landmarks */}
-    {/* Main Coastline from Abu Dhabi to Northern Emirates */}
+    {/* Dubai Coastline & Landmarks (Abstract/Angular Military Style) */}
+    {/* Main Coastline */}
     <path 
-      d="M 0,90 L 20,75 L 35,62 L 40,60 L 44,55 L 48,51 L 52,49 L 60,42 L 65,38 L 80,25 L 100,5" 
+      d="M -100,165 L 0,90 L 35,62 L 65,38 L 150,-32" 
       fill="none" 
       stroke="#FFFFFF" 
-      strokeOpacity="0.15"
-      strokeWidth={0.3 / cameraZoom} 
+      strokeOpacity="0.4"
+      strokeWidth={0.4 / cameraZoom} 
     />
     
-    {/* Palm Jebel Ali */}
-    <path d="M 37,59 A 2 2 0 1 1 39 57 A 2 2 0 1 1 37 59" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth={0.15 / cameraZoom} />
-    {/* Palm Jumeirah */}
-    <path d="M 47,52 A 2 2 0 1 1 49 50 A 2 2 0 1 1 47 52" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth={0.15 / cameraZoom} />
-    {/* The World Islands */}
-    <ellipse cx="54" cy="46" rx="2.5" ry="1.5" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} />
+    {/* Palm Jebel Ali (Abstract Square) */}
+    <path d="M 36,60 L 38,58 L 40,60 L 38,62 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    {/* Palm Jumeirah (Abstract Square) */}
+    <path d="M 46,53 L 48,51 L 50,53 L 48,55 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    {/* The World Islands (Abstract Polygon) */}
+    <path d="M 52,46 L 56,44 L 57,47 L 53,48 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
 
     {/* Defended Urban Footprint (Dubai Metropolitan Area) */}
     <path d="M 40,60 L 60,42 L 65,48 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
