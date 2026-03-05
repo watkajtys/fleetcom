@@ -94,20 +94,23 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastS
   );
 });
 
+import { useTrackStore } from './store';
+
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
-  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
+  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
+  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
 ) => {
-  if (prevProps.track !== nextProps.track) return false;
+  if (prevProps.trackId !== nextProps.trackId) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
   if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime }: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
+const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime }: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
+  const track = useTrackStore(state => state.tracks[trackId]);
   const now = useNow();
-  if (track.detected === false) return null;
+  if (!track || track.detected === false) return null;
 
   const elapsed = (now - lastSweepTime) / 1000;
   const smoothX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
@@ -284,7 +287,10 @@ const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
   </>
 ));
 
-const TrackSummaryTable = React.memo(({ tracks, hookedTrackIds, setHookedTrackIds }: { tracks: Track[], hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>> }) => {
+const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds }: { hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>> }) => {
+  const tracksMap = useTrackStore(state => state.tracks);
+  const tracks = useMemo(() => Object.values(tracksMap), [tracksMap]);
+
   return (
     <aside className="flex-1 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
       <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center gap-2 shrink-0">
@@ -375,7 +381,10 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVectoringTrackId }: { hookedTracks: Track[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void }) => {
+const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void }) => {
+  const tracksMap = useTrackStore(state => state.tracks);
+  const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
+
   const hookedTrack = hookedTracks.length === 1 ? hookedTracks[0] : undefined;
   const isGroup = hookedTracks.length > 1;
 
@@ -533,8 +542,61 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
   );
 });
 
+const FighterWaypoints = React.memo(({ cameraZoom, setDraggingWaypointId }: { cameraZoom: number, setDraggingWaypointId: (id: string | null) => void }) => {
+  const tracksMap = useTrackStore(state => state.tracks);
+  const trackIds = useTrackStore(state => state.trackIds);
+  const fighterTracks = useMemo(() => trackIds.map(id => tracksMap[id]).filter(t => t.isFighter), [tracksMap, trackIds]);
+
+  return (
+    <>
+      {fighterTracks.map(t => (
+        <g key={`wp-${t.id}`}>
+          {t.targetWaypoint && (
+            <line 
+              x1={t.x} y1={t.y} 
+              x2={t.targetWaypoint.x} y2={t.targetWaypoint.y} 
+              stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} 
+              strokeWidth={0.2 / cameraZoom} 
+              strokeDasharray={`${1 / cameraZoom} ${1 / cameraZoom}`} 
+              opacity="0.5" 
+            />
+          )}
+
+          {t.patrolWaypoint && !t.isRTB && (
+            <g>
+              <circle 
+                cx={t.patrolWaypoint.x} cy={t.patrolWaypoint.y} 
+                r={2 / cameraZoom} 
+                fill="transparent" 
+                className="cursor-move pointer-events-auto"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  setDraggingWaypointId(t.id);
+                }}
+              />
+              <g transform={`translate(${t.patrolWaypoint.x}, ${t.patrolWaypoint.y})`} pointerEvents="none">
+                <line x1={-0.8 / cameraZoom} y1={0} x2={0.8 / cameraZoom} y2={0} stroke="#00E5FF" strokeWidth={0.2 / cameraZoom} />
+                <line x1={0} y1={-0.8 / cameraZoom} x2={0} y2={0.8 / cameraZoom} stroke="#00E5FF" strokeWidth={0.2 / cameraZoom} />
+              </g>
+            </g>
+          )}
+
+          {t.isRTB && t.targetWaypoint && (
+            <text x={t.x + 1} y={t.y - 1} fill="#FFCC00" fontSize={0.7 / cameraZoom} fontFamily="monospace" fontWeight="bold">
+              RTB
+            </text>
+          )}
+        </g>
+      ))}
+    </>
+  );
+});
+
 export default function App() {
-  const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
+  const trackIds = useTrackStore(state => state.trackIds);
+  const addTracks = useTrackStore(state => state.addTracks);
+  const setTracks = useTrackStore(state => state.setTracks);
+
   const [lastSweepTime, setLastSweepTime] = useState(Date.now());
 
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
@@ -560,12 +622,12 @@ export default function App() {
 
   useEffect(() => {
     if (followedTrackId) {
-      const track = tracks.find(t => t.id === followedTrackId);
+      const track = useTrackStore.getState().getTrack(followedTrackId);
       if (track) {
         setCamera(prev => ({ ...prev, x: track.x, y: track.y }));
       }
     }
-  }, [tracks, followedTrackId]);
+  }, [followedTrackId]);
 
   const addLog = useCallback((message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
     const now = new Date();
@@ -574,11 +636,6 @@ export default function App() {
   }, []);
 
   const unackAlerts = useMemo(() => logs.filter(l => !l.acknowledged), [logs]);
-
-  const tracksRef = useRef(tracks);
-  useEffect(() => {
-    tracksRef.current = tracks;
-  }, [tracks]);
 
   useEffect(() => {
     const clockTimer = setInterval(() => {
@@ -810,7 +867,7 @@ export default function App() {
     }
 
     const CLICK_RADIUS = 2.5; // Slightly larger for easier selection on high-speed targets
-    const nearbyTracks = tracksRef.current
+    const nearbyTracks = useTrackStore.getState().getAllTracks()
       .filter(t => t.detected !== false)
       .filter(t => {
         const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
@@ -895,7 +952,7 @@ export default function App() {
       const elapsed = (Date.now() - lastSweepTime) / 1000;
 
       // Identify tracks in box
-      const inBox = tracksRef.current
+      const inBox = useTrackStore.getState().getAllTracks()
         .filter(t => t.detected !== false)
         .filter(t => {
           const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
@@ -939,7 +996,7 @@ export default function App() {
     if (hookedTrackIds.length === 0) return;
     
     hookedTrackIds.forEach((id, index) => {
-      const track = tracksRef.current.find(t => t.id === id);
+      const track = useTrackStore.getState().getTrack(id);
       if (!track || track.isInterrogating || track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') return;
 
       // Stagger multiple interrogations for visual effect
@@ -949,7 +1006,7 @@ export default function App() {
 
         setTimeout(() => {
           const isHijack = id === 'FLT-EK404';
-          const currentTrack = tracksRef.current.find(t => t.id === id);
+          const currentTrack = useTrackStore.getState().getTrack(id);
           if (!currentTrack) return;
 
           const isSweet = !isHijack && 
@@ -1014,7 +1071,7 @@ export default function App() {
     let currentThaad = inventory.thaad;
 
     hookedTrackIds.forEach((id, index) => {
-      const target = tracksRef.current.find(t => t.id === id);
+      const target = useTrackStore.getState().getTrack(id);
       if (!target || target.type !== 'HOSTILE' || (target.interceptors && target.interceptors.length >= 2)) return;
 
       const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
@@ -1094,7 +1151,7 @@ export default function App() {
           handleInterrogate();
           break;
         case '3':
-          const anyHostile = tracksRef.current.some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
+          const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
           handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
           break;
         case '4':
@@ -1118,16 +1175,15 @@ export default function App() {
 
   // --- RENDER HELPERS ---
 
-  const hookedTracks = tracks.filter(t => hookedTrackIds.includes(t.id));
-
-  const masterWarning = useMemo(() => {
+  const masterWarning = useTrackStore(state => {
+    const hookedTracks = hookedTrackIds.map(id => state.tracks[id]).filter(Boolean);
     const hookedTrack = hookedTracks.length === 1 ? hookedTracks[0] : undefined;
     if (hookedTrack && hookedTrack.type === 'HOSTILE') {
       const { tcpa, cpa } = calculateKinematics(hookedTrack);
       if (tcpa < 120 && parseFloat(cpa) < 10) return true;
     }
     return false;
-  }, [hookedTracks]);
+  });
 
   return (
     <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
@@ -1151,57 +1207,14 @@ export default function App() {
           <StaticMapBackground cameraZoom={camera.zoom} />
           <DefendedAssets cameraZoom={camera.zoom} />
 
-          {/* Render waypoints and lines for fighters */}
-          {tracks.filter(t => t.isFighter).map(t => (
-            <g key={`wp-${t.id}`}>
-              {/* Actual flight path line */}
-              {t.targetWaypoint && (
-                <line 
-                  x1={t.x} y1={t.y} 
-                  x2={t.targetWaypoint.x} y2={t.targetWaypoint.y} 
-                  stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} 
-                  strokeWidth={0.2 / camera.zoom} 
-                  strokeDasharray={`${1 / camera.zoom} ${1 / camera.zoom}`} 
-                  opacity="0.5" 
-                />
-              )}
+          <FighterWaypoints cameraZoom={camera.zoom} setDraggingWaypointId={setDraggingWaypointId} />
 
-              {/* User's Patrol Waypoint (Draggable Crosshair) */}
-              {t.patrolWaypoint && !t.isRTB && (
-                <g>
-                  {/* Invisible larger hit area for easier dragging */}
-                  <circle 
-                    cx={t.patrolWaypoint.x} cy={t.patrolWaypoint.y} 
-                    r={2 / camera.zoom} 
-                    fill="transparent" 
-                    className="cursor-move pointer-events-auto"
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setDraggingWaypointId(t.id);
-                    }}
-                  />
-                  {/* Crosshair symbol */}
-                  <g transform={`translate(${t.patrolWaypoint.x}, ${t.patrolWaypoint.y})`} pointerEvents="none">
-                    <line x1={-0.8 / camera.zoom} y1={0} x2={0.8 / camera.zoom} y2={0} stroke="#00E5FF" strokeWidth={0.2 / camera.zoom} />
-                    <line x1={0} y1={-0.8 / camera.zoom} x2={0} y2={0.8 / camera.zoom} stroke="#00E5FF" strokeWidth={0.2 / camera.zoom} />
-                  </g>
-                </g>
-              )}
-
-              {t.isRTB && t.targetWaypoint && (
-                <text x={t.x + 1} y={t.y - 1} fill="#FFCC00" fontSize={0.7 / camera.zoom} fontFamily="monospace" fontWeight="bold">
-                  RTB
-                </text>
-              )}
-            </g>
-          ))}
-
-                    {tracks.map(track => {
+                    {trackIds.map(trackId => {
                       return (
                         <TrackSymbol 
-                          key={`track-group-${track.id}`} 
-                          track={track} 
-                          isHooked={hookedTrackIds.includes(track.id)} 
+                          key={`track-group-${trackId}`} 
+                          trackId={trackId} 
+                          isHooked={hookedTrackIds.includes(trackId)} 
                           cameraZoom={camera.zoom} 
                           lastSweepTime={lastSweepTime} 
                         />
@@ -1261,14 +1274,14 @@ export default function App() {
         <div className="flex flex-col gap-4 w-[280px] pointer-events-auto h-full">
           
           {/* Track Summary Table */}
-          <TrackSummaryTable tracks={tracks} hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} />
+          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} />
 
           {/* System Event Log */}
           <SystemEventLog logs={logs} />
         </div>
 
         {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTracks={hookedTracks} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} />
+        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} />
       </main>
 
       {/* --- BOTTOM SOFT KEY BAR --- */}
@@ -1297,12 +1310,12 @@ export default function App() {
           className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
           disabled={hookedTrackIds.length === 0}
           onClick={() => {
-            const anyHostile = tracks.some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
+            const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
             handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
           }}
         >
           <span className="text-[8px] text-[#004466] mb-0.5">3</span>
-          {tracks.some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE') ? 'DOWNGRADE' : 'DECL HOSTILE'}
+          {useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE') ? 'DOWNGRADE' : 'DECL HOSTILE'}
         </button>
 
         <button 
