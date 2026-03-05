@@ -507,6 +507,7 @@ export default function App() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [followedTrackId, setFollowedTrackId] = useState<string | null>(null);
   const [vectoringTrackId, setVectoringTrackId] = useState<string | null>(null);
+  const [draggingWaypointId, setDraggingWaypointId] = useState<string | null>(null);
 
   useEffect(() => {
     if (followedTrackId) {
@@ -715,7 +716,7 @@ export default function App() {
 
     if (vectoringTrackId) {
       setTracks(current => current.map(t => 
-        t.id === vectoringTrackId ? { ...t, targetWaypoint: { x: coords.x, y: coords.y } } : t
+        t.id === vectoringTrackId ? { ...t, targetWaypoint: { x: coords.x, y: coords.y }, patrolWaypoint: { x: coords.x, y: coords.y } } : t
       ));
       addLog(`VECTOR COMMAND ISSUED TO ${vectoringTrackId}`, 'ACTION');
       setVectoringTrackId(null);
@@ -763,6 +764,14 @@ export default function App() {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingWaypointId) {
+      const coords = getMapCoords(e, e.currentTarget);
+      setTracks(current => current.map(t => 
+        t.id === draggingWaypointId ? { ...t, targetWaypoint: coords, patrolWaypoint: coords } : t
+      ));
+      return;
+    }
+
     if (isSelecting && selectionBox) {
       const coords = getMapCoords(e, e.currentTarget);
       setSelectionBox(prev => prev ? { ...prev, endX: coords.x, endY: coords.y } : null);
@@ -787,6 +796,11 @@ export default function App() {
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingWaypointId) {
+      setDraggingWaypointId(null);
+      return;
+    }
+
     if (isSelecting && selectionBox) {
       const x1 = Math.min(selectionBox.startX, selectionBox.endX);
       const x2 = Math.max(selectionBox.startX, selectionBox.endX);
@@ -1054,7 +1068,22 @@ export default function App() {
                 x2={t.targetWaypoint!.x} y2={t.targetWaypoint!.y} 
                 stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} strokeDasharray={`${1 / camera.zoom} ${1 / camera.zoom}`} opacity="0.5" 
               />
-              <circle cx={t.targetWaypoint!.x} cy={t.targetWaypoint!.y} r={0.5 / camera.zoom} fill="none" stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} />
+              {/* Invisible larger hit area for easier dragging */}
+              <circle 
+                cx={t.targetWaypoint!.x} cy={t.targetWaypoint!.y} 
+                r={2 / camera.zoom} 
+                fill="transparent" 
+                className="cursor-move pointer-events-auto"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  setDraggingWaypointId(t.id);
+                }}
+              />
+              {/* Crosshair symbol */}
+              <g transform={`translate(${t.targetWaypoint!.x}, ${t.targetWaypoint!.y})`} pointerEvents="none">
+                <line x1={-0.8 / camera.zoom} y1={0} x2={0.8 / camera.zoom} y2={0} stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} />
+                <line x1={0} y1={-0.8 / camera.zoom} x2={0} y2={0.8 / camera.zoom} stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} strokeWidth={0.2 / camera.zoom} />
+              </g>
               {t.isRTB && (
                 <text x={t.x + 1} y={t.y - 1} fill="#FFCC00" fontSize={0.7 / camera.zoom} fontFamily="monospace" fontWeight="bold">
                   RTB

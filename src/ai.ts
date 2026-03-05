@@ -65,7 +65,7 @@ export const processFighters = (
         return { ...track, targetWaypoint: crankWaypoint };
       } else {
         // Target destroyed, missed, or lost. Clear crank state and return to patrol
-        return { ...track, crankingTargetId: null, targetWaypoint: null };
+        return { ...track, crankingTargetId: null, targetWaypoint: track.patrolWaypoint || null };
       }
     }
 
@@ -165,7 +165,11 @@ export const processFighters = (
       }
     }
     
-    // If no target, continue current maneuver (handled by movement logic)
+    // If no target, return to patrol waypoint
+    if (track.patrolWaypoint && track.targetWaypoint !== track.patrolWaypoint) {
+      return { ...track, targetWaypoint: track.patrolWaypoint };
+    }
+    
     return track;
   });
 };
