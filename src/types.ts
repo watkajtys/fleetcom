@@ -40,7 +40,7 @@ export interface Track {
 }
 
 export interface SystemLog {
-  id: number;
+  id: string;
   time: string;
   message: string;
   type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION';

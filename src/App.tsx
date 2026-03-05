@@ -641,9 +641,9 @@ export default function App() {
 
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
-    { id: 1, time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
-    { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
-    { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
+    { id: 'initial-1', time: '16:00:00Z', message: 'SYS: IBCS NODE INITIALIZED', type: 'INFO', acknowledged: true },
+    { id: 'initial-2', time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
+    { id: 'initial-3', time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
   const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
@@ -652,6 +652,7 @@ export default function App() {
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoTamir, setIsAutoTamir] = useState(false);
+  const [wcs, setWcs] = useState<'TIGHT' | 'FREE'>('TIGHT');
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
   const [isGameStarted, setIsGameStarted] = useState(false);
@@ -702,7 +703,8 @@ export default function App() {
   const addLog = useCallback((message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
     const now = new Date();
     const timeStr = now.toISOString().substring(11, 19) + 'Z';
-    setLogs(prev => [{ id: Date.now(), time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
+    const logId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    setLogs(prev => [{ id: logId, time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
   }, []);
 
   const unackAlerts = useMemo(() => logs.filter(l => !l.acknowledged), [logs]);
@@ -722,6 +724,12 @@ export default function App() {
         const newTracks = event.generateTracks();
         setTracks(current => [...current, ...newTracks]);
         addLog(event.message, event.type);
+
+        // ROE Escalation: First TBM launch triggers WCS FREE
+        if (newTracks.some(t => t.category === 'TBM') && wcs === 'TIGHT') {
+          setWcs('FREE');
+          addLog('WCS SET TO FREE. ALL HOSTILE TRACKS CLEARED FOR ENGAGEMENT.', 'ALERT');
+        }
 
         // Calculate enemy cost for this wave
         const waveCost = newTracks.reduce((acc, t) => {
@@ -1034,7 +1042,7 @@ export default function App() {
             clearInterval(clockTimer);
             clearInterval(sweepTimer);
           };
-        }, [addLog, isGameStarted]);
+        }, [addLog, isGameStarted, wcs]);
       
         // --- INTERACTION HELPERS ---
 
@@ -1455,9 +1463,9 @@ export default function App() {
           {/* Render Splashes */}
           {splashes.map(s => (
             <g key={s.id} transform={`translate(${s.x}, ${s.y})`}>
-              <circle r={2 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / cameraZoom} className="animate-ping" />
-              <line x1={-1 / camera.zoom} y1={-1 / camera.zoom} x2={1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / cameraZoom} />
-              <line x1={1 / camera.zoom} y1={-1 / camera.zoom} x2={-1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / cameraZoom} />
+              <circle r={2 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" />
+              <line x1={-1 / camera.zoom} y1={-1 / camera.zoom} x2={1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
+              <line x1={1 / camera.zoom} y1={-1 / camera.zoom} x2={-1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
             </g>
           ))}
 
@@ -1500,7 +1508,7 @@ export default function App() {
             </span>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
-            <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className="text-[#00E5FF]">TIGHT</span></span>
+            <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
             <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
