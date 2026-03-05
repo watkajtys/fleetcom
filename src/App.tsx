@@ -806,11 +806,16 @@ export default function App() {
       const x2 = Math.max(selectionBox.startX, selectionBox.endX);
       const y1 = Math.min(selectionBox.startY, selectionBox.endY);
       const y2 = Math.max(selectionBox.startY, selectionBox.endY);
+      const elapsed = (Date.now() - lastSweepTime) / 1000;
 
       // Identify tracks in box
       const inBox = tracksRef.current
         .filter(t => t.detected !== false)
-        .filter(t => t.x >= x1 && t.x <= x2 && t.y >= y1 && t.y <= y2)
+        .filter(t => {
+          const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+          const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+          return smoothX >= x1 && smoothX <= x2 && smoothY >= y1 && smoothY <= y2;
+        })
         .map(t => t.id);
 
       if (inBox.length > 0) {
