@@ -108,7 +108,7 @@ export const MISSION_STEPS: MissionEvent[] = [
     ]
   },
   {
-    time: 90,
+    time: 50,
     message: 'WARNING RED. MULTIPLE HIGH-ALTITUDE, HIGH-VELOCITY TRACKS DETECTED. EVALUATED HOSTILE MRBM. VELOCITY MACH 6. DESCENDING THROUGH FL600. IMPACT DUBAI 90 SECONDS. RECOMMEND IMMEDIATE THAAD ENGAGEMENT.',
     type: 'ALERT',
     generateTracks: () => Array.from({length: 8}).map(() => createTargetTrack(
@@ -121,7 +121,7 @@ export const MISSION_STEPS: MissionEvent[] = [
     ))
   },
   {
-    time: 120,
+    time: 80,
     message: 'WARNING RED. MASSIVE LOW-ALTITUDE SIGNATURES DETECTED SEAWARD. EVALUATED MIXED UAS/CM SWARM. SATURATION ATTACK IMMINENT. CONSERVE HIGH-VALUE INTERCEPTORS.',
     type: 'ALERT',
     generateTracks: () => [
@@ -144,7 +144,7 @@ export const MISSION_STEPS: MissionEvent[] = [
     ]
   },
   {
-    time: 130,
+    time: 90,
     message: 'HUNTRESS: SCRAMBLE FALCON 23, 24 TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
     type: 'ACTION',
     generateTracks: () => [
