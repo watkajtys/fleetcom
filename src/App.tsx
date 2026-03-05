@@ -1219,20 +1219,16 @@ export default function App() {
           }
         }
   
-        if (weapon === 'PAC-3' || weapon === 'THAAD') {
-          if (target.category === 'UAS') {
-            addLog(`WARNING: USING HIGH-VALUE ASSET ON LOW-VALUE UAS`, 'WARN');
-          }
-        }
-  
-        const existingShots = target.interceptors ? target.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
-        if (existingShots >= 1) return; // Already engaged
-  
-        const shotsToTake = 1;
-  
-        // Check ammo
-        if (weapon === 'PAC-3' && currentPac3 <= 0) return;
-        if (weapon === 'TAMIR' && currentTamir <= 0) return;
+              if (weapon === 'PAC-3' || weapon === 'THAAD') {
+                if (target.category === 'UAS') {
+                  addLog(`WARNING: USING HIGH-VALUE ASSET ON LOW-VALUE UAS`, 'WARN');
+                }
+              }
+        
+              const shotsToTake = 1;
+        
+              // Check ammo
+              if (weapon === 'PAC-3' && currentPac3 <= 0) return;        if (weapon === 'TAMIR' && currentTamir <= 0) return;
         if (weapon === 'THAAD' && currentThaad <= 0) return;
   
         const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
