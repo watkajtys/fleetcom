@@ -52,20 +52,16 @@ export const processFighters = (
       }
     });
 
-    // 3. Cranking Maintenance (Post-Launch Support)
+    // 3. Post-Launch Support (Simplified to Fire-and-Forget)
     if (track.crankingTargetId) {
-      const crankTarget = trackMap.get(track.crankingTargetId); // O(1) lookup
-      
-      // Check if we still need to support the missile
+      const crankTarget = trackMap.get(track.crankingTargetId);
       const isMissileActive = crankTarget?.interceptors?.some(i => i.shooterId === track.id);
       
-      if (crankTarget && isMissileActive) {
-        // Continue the crank (keep setting the waypoint far out on the offset heading)
-        const crankWaypoint = calculateCrankWaypoint(track, crankTarget);
-        return { ...track, targetWaypoint: crankWaypoint };
-      } else {
-        // Target destroyed, missed, or lost. Clear crank state and return to patrol
+      if (!crankTarget || !isMissileActive) {
         return { ...track, crankingTargetId: null, targetWaypoint: track.patrolWaypoint || null };
+      } else {
+        // Just return to patrol while missile is in flight
+        return { ...track, targetWaypoint: track.patrolWaypoint || null };
       }
     }
 
@@ -124,7 +120,7 @@ export const processFighters = (
         const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
         const interceptTimeMs = interceptTimeSecs * 1000;
 
-        events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}. Cranking.`, logType: 'ACTION' });
+        events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}. Skinned.`, logType: 'ACTION' });
         events.push({ type: 'COST', amount: 1200000 });
 
         // Note: The actual interceptor injection happens in App.tsx to avoid mutating state deeply here,
@@ -142,15 +138,12 @@ export const processFighters = (
             interceptTtl: Math.ceil(interceptTimeSecs)
           });
         }
-
-        // Initiate Crank Maneuver
-        const crankWaypoint = calculateCrankWaypoint(track, bestTarget);
         
         return { 
           ...track, 
           missilesRemaining: track.missilesRemaining! - 1, 
           crankingTargetId: targetId,
-          targetWaypoint: crankWaypoint
+          targetWaypoint: track.patrolWaypoint || null
         };
       } else {
         // Intercept logic (Lead Pursuit)
