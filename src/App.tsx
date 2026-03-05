@@ -270,8 +270,8 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
       <text x={1.5 / cameraZoom} y={0.5 / cameraZoom} fill="#00FFFF" fontSize={0.8 / cameraZoom} fontFamily="monospace" opacity="0.8">BATTERY</text>
       
       {/* WEZ Rings */}
-      <circle cx="0" cy="0" r="5" fill="none" stroke="#FF0000" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} />
-      <text x="0" y="-5.5" fill="#FF0000" fontSize={0.6 / cameraZoom} textAnchor="middle" opacity="0.5">SHORAD WEZ</text>
+      <circle cx="0" cy="0" r="35" fill="none" stroke="#FF0000" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} />
+      <text x="0" y="-35.5" fill="#FF0000" fontSize={0.6 / cameraZoom} textAnchor="middle" opacity="0.5">SHORAD WEZ</text>
       <circle cx="0" cy="0" r="25" fill="none" stroke="#FFFF00" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
       <text x="0" y="-25.5" fill="#FFFF00" fontSize={0.6 / cameraZoom} textAnchor="middle" opacity="0.5">PAC-3 WEZ</text>
       <circle cx="0" cy="0" r="100" fill="none" stroke="#FF00FF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${1 / cameraZoom} ${1 / cameraZoom}`} />
@@ -637,7 +637,7 @@ export default function App() {
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
     { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
-  const [inventory, setInventory] = useState({ pac3: 32, shorad: 24, thaad: 8 });
+  const [inventory, setInventory] = useState({ pac3: 32, shorad: 120, thaad: 8 });
   const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'SHORAD': 0, 'THAAD': 0, 'AMRAAM': 0 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
@@ -842,13 +842,13 @@ export default function App() {
                 nextTracks = nextTracks.map(t => {
                   if (isAutoShoradRef.current && t.type === 'HOSTILE' && t.category !== 'TBM' && currentShorad > 0) {
                     const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
-                    // Check if within 5NM SHORAD WEZ and not already being shot at by Battery
+                    // Check if within 35NM SHORAD (Iron Dome) WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
                     
                     // Auto-SHORAD employs double-tap doctrine to guarantee kill on close-in leakers
                     const requiredMissiles = 2;
 
-                    if (rng <= 5.0 && existingBatteryMissiles < requiredMissiles) {
+                    if (rng <= 35.0 && existingBatteryMissiles < requiredMissiles) {
                       const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentShorad);
                       
                       let newInterceptors = [];
@@ -1345,7 +1345,7 @@ export default function App() {
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
             <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
-            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/24</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/120</span></span>
           </div>
         </div>
         <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
