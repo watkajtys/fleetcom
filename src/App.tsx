@@ -1068,7 +1068,7 @@ export default function App() {
                 <line 
                   x1={t.x} y1={t.y} 
                   x2={t.targetWaypoint.x} y2={t.targetWaypoint.y} 
-                  stroke={t.isRTB ? "#FFCC00" : (t.crankingTargetId ? "#FF00FF" : "#00E5FF")} 
+                  stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} 
                   strokeWidth={0.2 / camera.zoom} 
                   strokeDasharray={`${1 / camera.zoom} ${1 / camera.zoom}`} 
                   opacity="0.5" 
