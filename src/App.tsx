@@ -1504,7 +1504,7 @@ export default function App() {
           <div className="flex items-center gap-2 whitespace-nowrap">
             <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
             <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
-              {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'IBCS // C2 NODE'}
+              {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
             </span>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
