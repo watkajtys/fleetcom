@@ -845,8 +845,8 @@ export default function App() {
                     // Check if within 5NM SHORAD WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
                     
-                    // SHORAD is always Single-Shot doctrine due to magazine constraints
-                    const requiredMissiles = 1;
+                    // Auto-SHORAD employs double-tap doctrine to guarantee kill on close-in leakers
+                    const requiredMissiles = 2;
 
                     if (rng <= 5.0 && existingBatteryMissiles < requiredMissiles) {
                       const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentShorad);
