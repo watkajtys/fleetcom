@@ -474,24 +474,13 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                   {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : hookedTrack.alt.toString().padStart(5, '0')} FT
                 </div>
 
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">BRG / RNG</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
-                  {brg} / {rng} NM
+                <div className="border-r border-[#002B40] p-2 text-[#004466] flex flex-col">
+                  <span>BRG / RNG</span>
+                  <span className="text-[9px] opacity-50">BULLSEYE</span>
                 </div>
-
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">BULLSEYE</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00FFFF] font-bold">
-                  {bullBrg} / {bullRng}
-                </div>
-
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466] bg-[#00111A]/50">CPA (NM)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#FFFF00] font-bold bg-[#00111A]/50">
-                  {kinematics?.cpa.padStart(4, '0')}
-                </div>
-
-                <div className="border-r border-[#002B40] p-2 text-[#004466] bg-[#00111A]/50">TCPA (SEC)</div>
-                <div className={`p-2 text-right font-bold bg-[#00111A]/50 ${kinematics && kinematics.tcpa < 120 ? 'text-[#FF0000] animate-pulse' : 'text-[#FFFF00]'}`}>
-                  {kinematics?.tcpa.toString().padStart(4, '0')}
+                <div className="p-2 text-right text-[#00E5FF] font-bold flex flex-col">
+                  <span>{brg} / {rng} NM</span>
+                  <span className="text-[9px] text-[#00FFFF] opacity-80">{bullBrg} / {bullRng} NM</span>
                 </div>
               </div>
             </div>
