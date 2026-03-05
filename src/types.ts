@@ -3,7 +3,7 @@ export type TrackCategory = 'FW' | 'RW' | 'UAS' | 'CM' | 'TBM';
 
 export interface Interceptor {
   id: string; // Unique ID for the missile
-  weapon: 'PAC-3' | 'SHORAD' | 'THAAD' | 'AMRAAM';
+  weapon: 'PAC-3' | 'SHORAD' | 'THAAD' | 'AMRAAM' | 'C-RAM';
   shooterId: string; // ID of the battery or fighter that fired it
   launchPos: {x: number, y: number};
   engagementTime: number;

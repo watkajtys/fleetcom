@@ -5,7 +5,8 @@ export const BATTERY_POS = { x: 50, y: 60 };
 export const BULLSEYE_POS = { x: 80, y: 20 }; // Tactical Reference Point North East
 
 export const WEAPON_STATS = {
-  'SHORAD': { range: 5, cost: 400000, pk: 0.92, speedMach: 3.0 }, // Stinger
+  'C-RAM': { range: 2.5, cost: 500, pk: 0.95, speedMach: 5.0 }, // Phalanx CIWS / Laser Directed Energy
+  'SHORAD': { range: 35, cost: 50000, pk: 0.90, speedMach: 2.2 }, // Iron Dome (Tamir)
   'PAC-3': { range: 25, cost: 4500000, pk: 0.75, speedMach: 4.0 }, // PAC-3 MSE
   'THAAD': { range: 100, cost: 13000000, pk: 0.85, speedMach: 8.0 }, // THAAD
   'AMRAAM': { range: 18, cost: 1200000, pk: 0.80, speedMach: 4.5 } // AIM-120D

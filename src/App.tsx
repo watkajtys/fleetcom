@@ -637,8 +637,8 @@ export default function App() {
     { id: 2, time: '16:00:02Z', message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
     { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
-  const [inventory, setInventory] = useState({ pac3: 32, shorad: 120, thaad: 8 });
-  const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'SHORAD': 0, 'THAAD': 0, 'AMRAAM': 0 });
+  const [inventory, setInventory] = useState({ pac3: 32, shorad: 120, thaad: 8, cram: 999 });
+  const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'SHORAD': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoShorad, setIsAutoShorad] = useState(false);
@@ -884,6 +884,35 @@ export default function App() {
                 if (currentShorad !== inventoryRef.current.shorad) {
                    setInventory(prev => ({ ...prev, shorad: currentShorad }));
                 }
+
+                // 4.6 Terminal Point Defense (C-RAM / Laser CIWS)
+                nextTracks = nextTracks.map(t => {
+                  if (t.type === 'HOSTILE' && t.category !== 'TBM') {
+                    const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
+                    // Extremely close range, last ditch defense (2.5 NM)
+                    if (rng <= 2.5 && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'CIWS'))) {
+                      
+                      setInterceptorsFired(prev => ({ ...prev, 'C-RAM': prev['C-RAM'] + 1 }));
+                      events.push({ type: 'LOG', message: `CIWS ENGAGING LEAKER TRK ${t.id}`, logType: 'ACTION' });
+                      events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
+                      
+                      const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['C-RAM'].speedMach);
+                      const interceptTimeSecs = rng / Math.max(0.1, closureRate);
+                      
+                      const newInterceptor = {
+                        id: `CIWS-${Date.now()}-${Math.random()}`,
+                        weapon: 'C-RAM' as const,
+                        shooterId: 'CIWS',
+                        launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
+                        engagementTime: Date.now(),
+                        interceptDuration: interceptTimeSecs * 1000,
+                        interceptTtl: Math.ceil(interceptTimeSecs)
+                      };
+                      return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+                    }
+                  }
+                  return t;
+                });
 
                 // 5. Leaker Detection (Impacts on Dubai)
                 const impactedTrackIds = new Set<string>();
@@ -1364,6 +1393,7 @@ export default function App() {
             <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/120</span></span>
+            <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
           </div>
         </div>
         <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
