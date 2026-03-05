@@ -873,7 +873,7 @@ export default function App() {
             if (t.type === 'HOSTILE' || t.type === 'FRIEND' || t.type === 'ASSUMED_FRIEND') return update;
             if (isHijack) return { ...update, type: 'SUSPECT', threatName: 'HIJACK' };
             if (isSweet) return { ...update, type: 'FRIEND' };
-            return { ...update, type: 'UNKNOWN' };
+            return { ...update, type: 'SUSPECT' }; // SOUR = SUSPECT
           }));
         }, 1500);
       }, index * 200);
