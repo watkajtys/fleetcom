@@ -837,7 +837,7 @@ export default function App() {
     const clockTimer = setInterval(() => {
       simTimeRef.current += 1;
 
-      if (simTimeRef.current >= 350) {
+      if (simTimeRef.current >= 550) {
         setIsGameOver(true);
       }
 
