@@ -38,7 +38,11 @@ export const processFighters = (
         const uInNext = trackMap.get(u.id); // O(1) lookup
         if (uInNext && !uInNext.iffInterrogated) {
           const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
-          const threatType = uInNext.id === 'FLT-EK404' ? 'SUSPECT' : 'HOSTILE';
+          
+          let threatType: 'SUSPECT' | 'HOSTILE' = 'HOSTILE';
+          if (uInNext.id === 'FLT-EK404') threatType = 'SUSPECT';
+          else if (uInNext.category === 'FW' || uInNext.category === 'RW' || uInNext.category === 'UAS') threatType = 'SUSPECT'; // Manned aircraft & drones are suspect until declared
+          
           uInNext.iffInterrogated = true;
           // Hardening: Preserve manual HOSTILE status
           if (uInNext.type !== 'HOSTILE') uInNext.type = threatType;
