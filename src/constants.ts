@@ -5,10 +5,10 @@ export const BATTERY_POS = { x: 50, y: 60 };
 export const BULLSEYE_POS = { x: 80, y: 20 }; // Tactical Reference Point North East
 
 export const WEAPON_STATS = {
-  'SHORAD': { range: 5, cost: 5000, pk: 0.92, speedMach: 3.0 },
-  'PAC-3': { range: 25, cost: 4000000, pk: 0.75, speedMach: 4.0 },
-  'THAAD': { range: 100, cost: 15000000, pk: 0.85, speedMach: 8.0 },
-  'AMRAAM': { range: 18, cost: 1200000, pk: 0.80, speedMach: 4.5 }
+  'SHORAD': { range: 5, cost: 400000, pk: 0.92, speedMach: 3.0 }, // Stinger
+  'PAC-3': { range: 25, cost: 4500000, pk: 0.75, speedMach: 4.0 }, // PAC-3 MSE
+  'THAAD': { range: 100, cost: 13000000, pk: 0.85, speedMach: 8.0 }, // THAAD
+  'AMRAAM': { range: 18, cost: 1200000, pk: 0.80, speedMach: 4.5 } // AIM-120D
 };
 
 export const DEFENDED_ASSETS = [

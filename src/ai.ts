@@ -5,7 +5,7 @@ import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, 
 import { BATTERY_POS } from './constants';
 
 export interface AIEvent {
-  type: 'LOG' | 'COST';
+  type: 'LOG' | 'COST' | 'AMRAAM_FIRED';
   message?: string;
   logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION';
   amount?: number;
@@ -157,6 +157,7 @@ export const processFighters = (
 
         events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
         events.push({ type: 'COST', amount: 1200000 });
+        events.push({ type: 'AMRAAM_FIRED' });
 
         // Note: The actual interceptor injection happens in App.tsx to avoid mutating state deeply here,
         // but for now we'll mutate the incoming array as it's a draft array in the sweepTimer.

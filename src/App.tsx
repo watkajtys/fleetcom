@@ -638,6 +638,7 @@ export default function App() {
     { id: 3, time: '16:00:05Z', message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, shorad: 24, thaad: 8 });
+  const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'SHORAD': 0, 'THAAD': 0, 'AMRAAM': 0 });
   const [defenseCost, setDefenseCost] = useState(0);
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoShorad, setIsAutoShorad] = useState(false);
@@ -853,6 +854,9 @@ export default function App() {
                       let newInterceptors = [];
                       for (let i = 0; i < shotsToTake; i++) {
                         currentShorad--;
+                        
+                        setInterceptorsFired(prev => ({ ...prev, 'SHORAD': prev['SHORAD'] + 1 }));
+                        
                         events.push({ type: 'LOG', message: `SHORAD AUTO-ENGAGE TRK ${t.id}`, logType: 'ACTION' });
                         events.push({ type: 'COST', amount: WEAPON_STATS['SHORAD'].cost });
                         
@@ -910,6 +914,7 @@ export default function App() {
       events.forEach(e => {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
         if (e.type === 'COST') setDefenseCost(prev => prev + e.amount!);
+        if (e.type === 'AMRAAM_FIRED') setInterceptorsFired(prev => ({ ...prev, 'AMRAAM': prev['AMRAAM'] + 1 }));
       });
 
       setLastSweepTime(Date.now());
@@ -1179,6 +1184,11 @@ export default function App() {
           thaad: weapon === 'THAAD' ? prev.thaad - shotsToTake : prev.thaad,
         }));
         
+        setInterceptorsFired(prev => ({
+          ...prev,
+          [weapon]: prev[weapon] + shotsToTake
+        }));
+        
         setDefenseCost(prev => prev + (stats.cost * shotsToTake));
         addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon}`, 'ACTION');
         
@@ -1336,9 +1346,6 @@ export default function App() {
             <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF]">{inventory.thaad}/8</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/24</span></span>
-            <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-            <span className="text-[#FFCC00] whitespace-nowrap">DEFENSE COST: <span className="text-[#00E5FF]">${(defenseCost / 1000000).toFixed(2)}M</span></span>
-            <span className="text-[#FFCC00] whitespace-nowrap">ENEMY COST: <span className="text-[#FF0033]">${(enemyCost / 1000000).toFixed(2)}M</span></span>
           </div>
         </div>
         <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
