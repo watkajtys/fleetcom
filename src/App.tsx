@@ -821,6 +821,28 @@ export default function App() {
             } else {
               newHdg = (newHdg + 10) % 360;
             }
+          } else {
+            // Dynamic Profiles for Non-Fighter Tracks
+            if (track.id === 'FLT-EK404') {
+              // Hijack Profile: Aggressive descent to evade radar, throttle up
+              if (newAlt > 5000) newAlt = Math.max(5000, newAlt - 500); // 10,000 ft/min emergency descent
+              if (newSpd < 650) newSpd += 10; 
+            } else if (track.category === 'TBM') {
+              // Ballistic Profile: Exospheric cruise, then terminal hypersonic dive
+              const distToCity = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+              if (distToCity < 40) {
+                // Terminal phase: pitch down, bleed altitude massively, accelerate
+                newAlt = Math.max(0, newAlt - 12000); // 4000 ft/sec descent
+                if (newSpd < 6000) newSpd += 250;
+              }
+            } else if (track.category === 'CM') {
+              // Cruise Missile: Sea-skimming terrain following
+              newAlt = Math.max(50, 100 + (Math.random() * 40 - 20)); // Jitter between 80-120ft
+            } else if (track.category === 'UAS') {
+              // Drone Swarm: Slight altitude and heading weave to complicate targeting
+              newAlt = Math.max(100, track.alt + (Math.random() * 20 - 10));
+              newHdg = (newHdg + (Math.random() * 4 - 2) + 360) % 360;
+            }
           }
 
           const speedFactor = newSpd / 1200; 
