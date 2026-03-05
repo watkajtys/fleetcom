@@ -150,8 +150,14 @@ export const processFighters = (
     }
     
     // If no target, return to patrol waypoint
-    if (track.patrolWaypoint && track.targetWaypoint !== track.patrolWaypoint) {
-      return { ...track, targetWaypoint: track.patrolWaypoint };
+    if (track.patrolWaypoint) {
+      // Don't re-assign if it's already the target, or if we are already there (target is null from arriving)
+      const isAlreadyTarget = track.targetWaypoint?.x === track.patrolWaypoint.x && track.targetWaypoint?.y === track.patrolWaypoint.y;
+      const isAtPatrol = calculateRange(track.x, track.y, track.patrolWaypoint.x, track.patrolWaypoint.y) <= 1.5;
+      
+      if (!isAlreadyTarget && !isAtPatrol) {
+        return { ...track, targetWaypoint: track.patrolWaypoint };
+      }
     }
     
     return track;

@@ -643,9 +643,11 @@ export default function App() {
                 newHdg = (newHdg + turnRate + 360) % 360;
               } else {
                 if (!track.isRTB) {
+                  if (newTargetWaypoint !== null) {
+                    events.push({ type: 'LOG', message: `${track.id}: On station.`, logType: 'INFO' });
+                  }
                   newTargetWaypoint = null;
                   newHdg = (newHdg + 10) % 360;
-                  events.push({ type: 'LOG', message: `${track.id}: On station.`, logType: 'INFO' });
                 }
               }
             } else {
