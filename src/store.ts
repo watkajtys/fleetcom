@@ -6,12 +6,25 @@ interface TrackStore {
   tracks: Record<string, Track>;
   trackIds: string[];
   
+  // Stats
+  interceptorsFired: Record<string, number>;
+  leakerCount: number;
+  destroyedAssetIds: string[];
+  defenseCost: number;
+  enemyCost: number;
+  
   // Actions
   setTracks: (updater: (currentTracks: Track[]) => Track[]) => void;
   addTracks: (newTracks: Track[]) => void;
   updateTrack: (id: string, updater: (track: Track) => Partial<Track>) => void;
   getTrack: (id: string) => Track | undefined;
   getAllTracks: () => Track[];
+  
+  // Stat Actions
+  incrementInterceptorsFired: (type: string, amount?: number) => void;
+  addLeaker: (assetId?: string) => void;
+  addDefenseCost: (amount: number) => void;
+  addEnemyCost: (amount: number) => void;
 }
 
 export const useTrackStore = create<TrackStore>((set, get) => {
@@ -25,6 +38,12 @@ export const useTrackStore = create<TrackStore>((set, get) => {
   return {
     tracks: initialMap,
     trackIds: initialIds,
+    
+    interceptorsFired: { 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 },
+    leakerCount: 0,
+    destroyedAssetIds: [],
+    defenseCost: 0,
+    enemyCost: 0,
 
     setTracks: (updater) => {
       set((state) => {
@@ -75,6 +94,27 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     getAllTracks: () => {
       const state = get();
       return state.trackIds.map(id => state.tracks[id]);
-    }
+    },
+
+    incrementInterceptorsFired: (type, amount = 1) => {
+      set(state => ({
+        interceptorsFired: {
+          ...state.interceptorsFired,
+          [type]: (state.interceptorsFired[type] || 0) + amount
+        }
+      }));
+    },
+
+    addLeaker: (assetId) => {
+      set(state => ({
+        leakerCount: state.leakerCount + 1,
+        destroyedAssetIds: assetId && !state.destroyedAssetIds.includes(assetId) 
+          ? [...state.destroyedAssetIds, assetId] 
+          : state.destroyedAssetIds
+      }));
+    },
+
+    addDefenseCost: (amount) => set(state => ({ defenseCost: state.defenseCost + amount })),
+    addEnemyCost: (amount) => set(state => ({ enemyCost: state.enemyCost + amount }))
   };
 });

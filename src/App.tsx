@@ -769,11 +769,6 @@ export default function App() {
     { id: 'initial-4', time: getGstTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
-  const [interceptorsFired, setInterceptorsFired] = useState({ 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 });
-  const [destroyedAssetIds, setDestroyedAssetIds] = useState<string[]>([]);
-  const [leakerCount, setLeakerCount] = useState(0);
-  const [defenseCost, setDefenseCost] = useState(0);
-  const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoTamir, setIsAutoTamir] = useState(false);
   const [wcs, setWcs] = useState<'TIGHT' | 'FREE'>('TIGHT');
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
@@ -782,6 +777,11 @@ export default function App() {
   const [isGameOver, setIsGameOver] = useState(false);
   const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
   const simTimeRef = useRef(0);
+
+  const incrementInterceptorsFired = useTrackStore(state => state.incrementInterceptorsFired);
+  const addLeaker = useTrackStore(state => state.addLeaker);
+  const addDefenseCost = useTrackStore(state => state.addDefenseCost);
+  const addEnemyCost = useTrackStore(state => state.addEnemyCost);
 
   const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
     setButtonFeedback(prev => ({ ...prev, [key]: type }));
@@ -860,7 +860,7 @@ export default function App() {
           if (t.category === 'TBM') return acc + 3000000; // $3M per TBM
           return acc;
         }, 0);
-        setEnemyCost(prev => prev + waveCost);
+        addEnemyCost(waveCost);
       }
     }, 1000);
 
@@ -1053,7 +1053,7 @@ export default function App() {
                       for (let i = 0; i < shotsToTake; i++) {
                         currentTamir--;
                         
-                        setInterceptorsFired(prev => ({ ...prev, 'TAMIR': prev['TAMIR'] + 1 }));
+                        incrementInterceptorsFired('TAMIR');
                         
                         const costStr = WEAPON_STATS['TAMIR'].cost >= 1000000 ? `$${(WEAPON_STATS['TAMIR'].cost / 1000000).toFixed(1)}M` : `$${Math.round(WEAPON_STATS['TAMIR'].cost / 1000)}K`;
                         events.push({ type: 'LOG', message: `TAMIR AUTO-ENGAGE TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
@@ -1093,7 +1093,7 @@ export default function App() {
                       
                       const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y);
                       if (rngToAsset <= 2.5) {
-                        setInterceptorsFired(prev => ({ ...prev, 'C-RAM': prev['C-RAM'] + 1 }));
+                        incrementInterceptorsFired('C-RAM');
                         const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
                         events.push({ type: 'LOG', message: `CIWS (${asset.id}) ENGAGING LEAKER TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
                         events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
@@ -1145,14 +1145,10 @@ export default function App() {
 
       events.forEach(e => {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
-        if (e.type === 'COST') setDefenseCost(prev => prev + e.amount!);
-        if (e.type === 'AMRAAM_FIRED') setInterceptorsFired(prev => ({ ...prev, 'AMRAAM': prev['AMRAAM'] + 1 }));
+        if (e.type === 'COST') addDefenseCost(e.amount!);
+        if (e.type === 'AMRAAM_FIRED') incrementInterceptorsFired('AMRAAM');
         if (e.type === 'IMPACT') {
-          setLeakerCount(prev => prev + 1);
-          const assetId = (e as any).assetId;
-          if (assetId) {
-            setDestroyedAssetIds(prev => prev.includes(assetId) ? prev : [...prev, assetId]);
-          }
+          addLeaker((e as any).assetId);
         }
         if ((e as any).type === 'SPLASH') {
           setSplashes(prev => [...prev, { id: `splash-${Date.now()}-${Math.random()}`, x: (e as any).x, y: (e as any).y, time: Date.now() }]);
@@ -1443,17 +1439,15 @@ export default function App() {
           setInventory(prev => ({
             ...prev,
             pac3: weapon === 'PAC-3' ? prev.pac3 - shotsToTake : prev.pac3,
-            tamir: weapon === 'TAMIR' ? prev.tamir - shotsToTake : prev.tamir,
-            thaad: weapon === 'THAAD' ? prev.thaad - shotsToTake : prev.thaad,
-          }));        
-        setInterceptorsFired(prev => ({
-          ...prev,
-          [weapon]: prev[weapon] + shotsToTake
-        }));
-        
-        const costStr = stats.cost >= 1000000 ? `$${(stats.cost / 1000000).toFixed(1)}M` : `$${Math.round(stats.cost / 1000)}K`;
-        setDefenseCost(prev => prev + (stats.cost * shotsToTake));
-        addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon} (-${costStr})`, 'ACTION');
+                      tamir: weapon === 'TAMIR' ? prev.tamir - shotsToTake : prev.tamir,
+                      thaad: weapon === 'THAAD' ? prev.thaad - shotsToTake : prev.thaad,
+                    }));
+                    
+                    incrementInterceptorsFired(weapon, shotsToTake);
+                    
+                    const costStr = stats.cost >= 1000000 ? `${(stats.cost / 1000000).toFixed(1)}M` : `${Math.round(stats.cost / 1000)}K`;
+                    addDefenseCost(stats.cost * shotsToTake);
+                    addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon} (-${costStr})`, 'ACTION');
         
         const missileSpdNmSec = weapon === "THAAD" ? 1.5 : (weapon === "PAC-3" ? 0.7 : 0.5); // Mach 8 vs Mach 4 vs Mach 3
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
@@ -1556,15 +1550,7 @@ export default function App() {
   return (
     <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
       {!isGameStarted && <BriefingModal onStart={() => setIsGameStarted(true)} />}
-      {isGameOver && (
-        <AfterActionReport 
-          interceptorsFired={interceptorsFired}
-          leakerCount={leakerCount}
-          destroyedAssetIds={destroyedAssetIds}
-          defenseCost={defenseCost}
-          enemyCost={enemyCost}
-        />
-      )}
+      {isGameOver && <AfterActionReport />}
 
       {/* --- FULL SCREEN TACTICAL MAP BACKGROUND --- */}
       <div 

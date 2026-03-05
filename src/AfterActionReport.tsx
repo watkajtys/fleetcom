@@ -1,15 +1,14 @@
 import React from 'react';
 import { DEFENDED_ASSETS } from './constants';
+import { useTrackStore } from './store';
 
-interface AARProps {
-  interceptorsFired: Record<string, number>;
-  leakerCount: number;
-  destroyedAssetIds: string[];
-  defenseCost: number;
-  enemyCost: number;
-}
+const AfterActionReport = () => {
+  const interceptorsFired = useTrackStore(state => state.interceptorsFired);
+  const leakerCount = useTrackStore(state => state.leakerCount);
+  const destroyedAssetIds = useTrackStore(state => state.destroyedAssetIds);
+  const defenseCost = useTrackStore(state => state.defenseCost);
+  const enemyCost = useTrackStore(state => state.enemyCost);
 
-const AfterActionReport = ({ interceptorsFired, leakerCount, destroyedAssetIds, defenseCost, enemyCost }: AARProps) => {
   const protectedAssets = DEFENDED_ASSETS.filter(a => !destroyedAssetIds.includes(a.id));
   const survivalRate = (protectedAssets.length / DEFENDED_ASSETS.length) * 100;
 
