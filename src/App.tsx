@@ -649,7 +649,19 @@ export default function App() {
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoTamir, setIsAutoTamir] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
+  const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
   const simTimeRef = useRef(0);
+
+  const triggerKeyFeedback = useCallback((key: string, type: 'action' | 'error') => {
+    setButtonFeedback(prev => ({ ...prev, [key]: type }));
+    setTimeout(() => {
+      setButtonFeedback(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }, 150);
+  }, []);
 
   // Camera State
   const [camera, setCamera] = useState({ x: BATTERY_POS.x, y: BATTERY_POS.y, zoom: 0.5 });
@@ -1291,28 +1303,40 @@ export default function App() {
       // Ignore if user is typing in an input (though we don't have any yet)
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+      const trigger = (key: string, action: () => void) => {
+        action();
+        setButtonFeedback(prev => ({ ...prev, [key]: 'action' }));
+        setTimeout(() => setButtonFeedback(prev => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }), 150);
+      };
+
       switch (e.key) {
         case '1':
-          setHookedTrackIds([]);
+          if (hookedTrackIds.length > 0) trigger('1', () => setHookedTrackIds([]));
           break;
         case '2':
-          handleInterrogate();
+          if (hookedTrackIds.length > 0) trigger('2', () => handleInterrogate());
           break;
         case '3':
-          const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
-          handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
+          if (hookedTrackIds.length > 0) trigger('3', () => {
+            const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
+            handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
+          });
           break;
         case '4':
-          handleEngage('THAAD');
+          if (hookedTrackIds.length > 0) trigger('4', () => handleEngage('THAAD'));
           break;
         case '5':
-          handleEngage('PAC-3');
+          if (hookedTrackIds.length > 0) trigger('5', () => handleEngage('PAC-3'));
           break;
         case '6':
-          handleEngage('TAMIR');
+          if (hookedTrackIds.length > 0) trigger('6', () => handleEngage('TAMIR'));
           break;
         case '7':
-          setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true })));
+          if (unackAlertsRef.current.length > 0) trigger('7', () => setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true }))));
           break;
       }
     };
@@ -1436,27 +1460,34 @@ export default function App() {
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
         
         <button 
-          className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+            buttonFeedback['1'] === 'action' ? 'bg-[#004466] border-[#00E5FF] brightness-150 scale-[0.98]' : 'bg-[#001A26] border-[#004466]'
+          }`}
           disabled={hookedTrackIds.length === 0}
-          onClick={() => setHookedTrackIds([])}
+          onClick={() => { triggerKeyFeedback('1', 'action'); setHookedTrackIds([]); }}
         >
           <span className="text-[8px] text-[#004466] mb-0.5">1</span>
           DROP
         </button>
 
         <button 
-          className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+            buttonFeedback['2'] === 'action' ? 'bg-[#004466] border-[#00E5FF] brightness-150 scale-[0.98]' : 'bg-[#001A26] border-[#004466]'
+          }`}
           disabled={hookedTrackIds.length === 0}
-          onClick={handleInterrogate}
+          onClick={() => { triggerKeyFeedback('2', 'action'); handleInterrogate(); }}
         >
           <span className="text-[8px] text-[#004466] mb-0.5">2</span>
           IFF
         </button>
 
         <button 
-          className="h-10 px-2 lg:px-4 bg-[#001A26] border border-[#004466] hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+            buttonFeedback['3'] === 'action' ? 'bg-[#004466] border-[#00E5FF] brightness-150 scale-[0.98]' : 'bg-[#001A26] border-[#004466]'
+          }`}
           disabled={hookedTrackIds.length === 0}
           onClick={() => {
+            triggerKeyFeedback('3', 'action');
             const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
             handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
           }}
@@ -1466,27 +1497,33 @@ export default function App() {
         </button>
 
         <button 
-          className="h-10 px-2 lg:px-4 bg-[#330033] border border-[#FF00FF] hover:bg-[#440033] text-[#FF00FF] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center ml-auto whitespace-nowrap"
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#440033] text-[#FF00FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center ml-auto whitespace-nowrap ${
+            buttonFeedback['4'] === 'action' ? 'bg-[#660066] border-[#FF00FF] brightness-150 scale-[0.98]' : 'bg-[#330033] border-[#FF00FF]'
+          }`}
           disabled={hookedTrackIds.length === 0}
-          onClick={() => handleEngage('THAAD')}
+          onClick={() => { triggerKeyFeedback('4', 'action'); handleEngage('THAAD'); }}
         >
           <span className="text-[8px] text-[#FF00FF] opacity-50 mb-0.5">4</span>
           ENGAGE THAAD
         </button>
 
         <button 
-          className="h-10 px-2 lg:px-4 bg-[#330000] border border-[#FF0033] hover:bg-[#440000] text-[#FF0033] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#440000] text-[#FF0033] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+            buttonFeedback['5'] === 'action' ? 'bg-[#660000] border-[#FF0033] brightness-150 scale-[0.98]' : 'bg-[#330000] border-[#FF0033]'
+          }`}
           disabled={hookedTrackIds.length === 0}
-          onClick={() => handleEngage('PAC-3')}
+          onClick={() => { triggerKeyFeedback('5', 'action'); handleEngage('PAC-3'); }}
         >
           <span className="text-[8px] text-[#FF0033] opacity-50 mb-0.5">5</span>
           ENGAGE PAC-3
         </button>
 
         <button 
-          className="h-10 px-2 lg:px-4 bg-[#222200] border border-[#FFCC00] hover:bg-[#333300] text-[#FFCC00] text-[10px] lg:text-xs font-bold tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap"
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#333300] text-[#FFCC00] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+            buttonFeedback['6'] === 'action' ? 'bg-[#666600] border-[#FFCC00] brightness-150 scale-[0.98]' : 'bg-[#222200] border-[#FFCC00]'
+          }`}
           disabled={hookedTrackIds.length === 0}
-          onClick={() => handleEngage('TAMIR')}
+          onClick={() => { triggerKeyFeedback('6', 'action'); handleEngage('TAMIR'); }}
         >
           <span className="text-[8px] text-[#FFCC00] opacity-50 mb-0.5">6</span>
           ENGAGE TAMIR
@@ -1495,13 +1532,13 @@ export default function App() {
         <div className="w-px h-8 bg-[#002B40] mx-1 lg:mx-2 shrink-0" />
 
         <button 
-          className={`h-10 px-2 lg:px-4 border text-[10px] lg:text-xs font-bold tracking-widest transition-colors flex flex-col items-center justify-center whitespace-nowrap shrink-0 ${
+          className={`h-10 px-2 lg:px-4 border text-[10px] lg:text-xs font-bold tracking-widest transition-all flex flex-col items-center justify-center whitespace-nowrap shrink-0 ${
             unackAlerts.length > 0 
-              ? 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]' 
+              ? (buttonFeedback['7'] === 'action' ? 'bg-[#FF3366] border-[#FF0033] text-[#00050A] brightness-150 scale-[0.98]' : 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]')
               : 'bg-[#001A26] border-[#004466] text-[#004466] cursor-not-allowed'
           }`}
           disabled={unackAlerts.length === 0}
-          onClick={handleAckAlerts}
+          onClick={() => { triggerKeyFeedback('7', 'action'); handleAckAlerts(); }}
         >
           <span className={`text-[8px] mb-0.5 ${unackAlerts.length > 0 ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>7</span>
           ACK ALERTS
