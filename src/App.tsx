@@ -422,11 +422,14 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
 });
 
 const SystemClock = React.memo(() => {
-  const [time, setTime] = useState(() => {
+  const [times, setTimes] = useState(() => {
     const now = new Date();
     const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
     const gstDate = new Date(utc + (3600000 * 4));
-    return gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    return {
+      gst: gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
+      zulu: now.toISOString().substring(11, 19) + 'Z'
+    };
   });
 
   useEffect(() => {
@@ -434,12 +437,20 @@ const SystemClock = React.memo(() => {
       const now = new Date();
       const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
       const gstDate = new Date(utc + (3600000 * 4));
-      setTime(gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
+      setTimes({
+        gst: gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
+        zulu: now.toISOString().substring(11, 19) + 'Z'
+      });
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  return <span className="text-[#00E5FF] tabular-nums">{time}</span>;
+  return (
+    <div className="flex flex-col items-end leading-none">
+      <span className="text-[#00E5FF] tabular-nums text-xs lg:text-sm font-bold">{times.gst}</span>
+      <span className="text-[#00E5FF] tabular-nums text-[9px] opacity-40">ZULU: {times.zulu}</span>
+    </div>
+  );
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
@@ -775,6 +786,7 @@ export default function App() {
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
   const simTimeRef = useRef(0);
 
@@ -835,6 +847,7 @@ export default function App() {
     if (!isGameStarted) return;
 
     const clockTimer = setInterval(() => {
+      if (isPaused) return;
       simTimeRef.current += 1;
 
       if (simTimeRef.current >= 550) {
@@ -865,6 +878,7 @@ export default function App() {
     }, 1000);
 
     const sweepTimer = setInterval(() => {
+      if (isPaused) return;
       const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
 
       setTracks(currentTracks => {
@@ -1173,7 +1187,7 @@ export default function App() {
             clearInterval(clockTimer);
             clearInterval(sweepTimer);
           };
-        }, [addLog, isGameStarted, wcs]);
+        }, [addLog, isGameStarted, wcs, isPaused]);
       
         // --- INTERACTION HELPERS ---
 
@@ -1515,6 +1529,10 @@ export default function App() {
       };
 
       switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          setIsPaused(prev => !prev);
+          break;
         case '1':
           if (hookedTrackIds.length > 0) trigger('1', () => setHookedTrackIds([]));
           break;
@@ -1562,6 +1580,14 @@ export default function App() {
     <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
       {!isGameStarted && <BriefingModal onStart={() => setIsGameStarted(true)} />}
       {isGameOver && <AfterActionReport />}
+      
+      {isPaused && !isGameOver && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#00050A]/40 backdrop-blur-[2px] pointer-events-none">
+          <div className="bg-[#001A26]/90 border border-[#00E5FF] px-8 py-4 shadow-[0_0_30px_rgba(0,229,255,0.2)] animate-pulse">
+            <span className="text-2xl font-bold tracking-[0.5em] text-[#00E5FF]">SYSTEM PAUSED</span>
+          </div>
+        </div>
+      )}
 
       {/* --- FULL SCREEN TACTICAL MAP BACKGROUND --- */}
       <div 
@@ -1626,29 +1652,30 @@ export default function App() {
       </div>
 
             {/* --- TOP STATUS BAR --- */}
-            <header className={`fixed top-0 left-0 right-0 h-16 bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between px-4 z-50 rounded-none transition-colors duration-300 shrink-0`}>
-              <div className="flex items-center gap-4 lg:gap-6">
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
-                  <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
-                    {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
-                  <span className="text-[#FFCC00] whitespace-nowrap">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
-                              <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-                              <span className="text-[#00FF33] whitespace-nowrap">THAAD: <span className="text-[#00E5FF] tabular-nums">{inventory.thaad}/8</span></span>
-                              <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF] tabular-nums">{inventory.pac3}/32</span></span>
-                              <span className="text-[#00FF33] whitespace-nowrap">TAMIR: <span className="text-[#00E5FF] tabular-nums">{inventory.tamir}/120</span></span>
-                              <span className="text-[#00FF33] whitespace-nowrap">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>                </div>
-              </div>
+                  <header className={`fixed top-0 left-0 right-0 h-16 bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between px-4 z-50 rounded-none transition-colors duration-300 shrink-0`}>
+                    <div className="flex items-center gap-4 lg:gap-6">
+                      <div className="flex items-center gap-2 whitespace-nowrap" title="Joint Integrated Air and Missile Defense">
+                        <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
+                        <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
+                          {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
+                        <span className="text-[#FFCC00] whitespace-nowrap" title="Weapons Control Status: TIGHT (Fire only at hostiles) / FREE (Fire at any non-friendly)">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
+                        <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
+                        <span className="text-[#00FF33] whitespace-nowrap" title="Terminal High Altitude Area Defense (Anti-Ballistic)">THAAD: <span className="text-[#00E5FF] tabular-nums">{inventory.thaad}/8</span></span>
+                        <span className="text-[#00FF33] whitespace-nowrap" title="Patriot Advanced Capability-3 MSE (Hit-to-Kill Interceptor)">PAC-3: <span className="text-[#00E5FF] tabular-nums">{inventory.pac3}/32</span></span>
+                        <span className="text-[#00FF33] whitespace-nowrap" title="Iron Dome Interceptor (Counter-Rocket/UAS)">TAMIR: <span className="text-[#00E5FF] tabular-nums">{inventory.tamir}/120</span></span>
+                        <span className="text-[#00FF33] whitespace-nowrap" title="Counter Rocket, Artillery, and Mortar (Terminal Auto-Defense)">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
+                      </div>
+                    </div>
               <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
                 {unackAlerts.length > 0 && (
                   <div className="bg-[#FF0033] text-[#00050A] px-2 py-1 animate-pulse border border-[#FF0033]">
                     {unackAlerts.length} UNACK ALERTS
                   </div>
                 )}
-                <span className="text-[#00E5FF]">SECTOR: <SystemClock /></span>
+                <SystemClock />
               </div>
             </header>
       
@@ -1688,6 +1715,7 @@ export default function App() {
           }`}
           disabled={hookedTrackIds.length === 0}
           onClick={() => { triggerKeyFeedback('1', 'action'); setHookedTrackIds([]); }}
+          title="Drop currently hooked track(s) selection"
         >
           <span className="text-[8px] text-[#004466] mb-0.5">1</span>
           DROP
@@ -1699,6 +1727,7 @@ export default function App() {
           }`}
           disabled={hookedTrackIds.length === 0}
           onClick={() => { triggerKeyFeedback('2', 'action'); handleInterrogate(); }}
+          title="Identification Friend or Foe: Interrogate the selected track for electronic signature"
         >
           <span className="text-[8px] text-[#004466] mb-0.5">2</span>
           IFF
@@ -1714,6 +1743,7 @@ export default function App() {
             const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
             handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
           }}
+          title="Declare the selected track as HOSTILE (Cleared to Engage) or downgrade to SUSPECT"
         >
           <span className="text-[8px] text-[#004466] mb-0.5">3</span>
           {useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE') ? 'DOWNGRADE' : 'DECL HOSTILE'}
