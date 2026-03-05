@@ -381,7 +381,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void }) => {
+const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoShorad, setIsAutoShorad, salvoMode, setSalvoMode }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoShorad: boolean, setIsAutoShorad: React.Dispatch<React.SetStateAction<boolean>>, salvoMode: boolean, setSalvoMode: React.Dispatch<React.SetStateAction<boolean>> }) => {
   const tracksMap = useTrackStore(state => state.tracks);
   const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
 
@@ -395,13 +395,13 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
   const bullRng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y).toFixed(0).padStart(3, '0') : '';
 
   return (
-    <aside className={`w-[300px] bg-[#001A26]/20 backdrop-blur-md border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-colors duration-300 h-fit`}>
+    <aside className={`w-[300px] bg-[#001A26]/20 backdrop-blur-md border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-colors duration-300 h-fit pb-0`}>
       <div className={`px-3 py-2 border-b ${masterWarning ? 'bg-[#440000]/20 border-[#FF0033]' : 'bg-[#001A26]/20 border-[#002B40]'} flex items-center gap-2 shrink-0`}>
         <span className={masterWarning ? 'text-[#FF0033] font-bold' : 'text-[#00E5FF] font-bold'}>[DATA]</span>
         <h2 className={`text-xs font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>{isGroup ? `GROUP TRACK DATA (${hookedTracks.length})` : 'HOOKED TRACK DATA'}</h2>
       </div>
       
-      <div className="p-4 flex flex-col gap-4">
+      <div className="p-4 flex flex-col gap-4 flex-1">
         {isGroup ? (
           <div className="space-y-4">
             <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
@@ -442,39 +442,35 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
               </span>
             </div>
 
-            {/* Strict Data Grid */}
+            {/* Strict Data Grid - Consolidated */}
             <div className="border border-[#002B40] bg-[#000A14]/30">
               <div className="grid grid-cols-2 text-xs">
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">CAT</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{hookedTrack.category}</div>
                 
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">ALT (FT)</div>
+                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">CAT / SRC</div>
                 <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
-                  {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : hookedTrack.alt.toString().padStart(5, '0')}
+                  {hookedTrack.category} / {hookedTrack.sensor}
+                </div>
+
+                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">HDG / SPD</div>
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
+                  {Math.round(hookedTrack.hdg).toString().padStart(3, '0')} / {Math.round(hookedTrack.spd).toString().padStart(4, '0')}
                 </div>
                 
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">SPD (KTS)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{Math.round(hookedTrack.spd).toString().padStart(4, '0')}</div>
-                
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">CSE (DEG)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{Math.round(hookedTrack.hdg).toString().padStart(3, '0')}</div>
+                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">ALTITUDE</div>
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
+                  {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : hookedTrack.alt.toString().padStart(5, '0')} FT
+                </div>
 
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">BRG (DEG)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{brg}</div>
-                
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">RNG (NM)</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{rng}</div>
+                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">BRG / RNG</div>
+                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
+                  {brg} / {rng} NM
+                </div>
 
-                {/* Bullseye Reference */}
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">BULLSEYE</div>
                 <div className="border-b border-[#002B40] p-2 text-right text-[#00FFFF] font-bold">
                   {bullBrg} / {bullRng}
                 </div>
 
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">SRC</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">{hookedTrack.sensor}</div>
-
-                {/* Advanced Kinematics */}
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466] bg-[#00111A]/50">CPA (NM)</div>
                 <div className="border-b border-[#002B40] p-2 text-right text-[#FFFF00] font-bold bg-[#00111A]/50">
                   {kinematics?.cpa.padStart(4, '0')}
@@ -532,11 +528,30 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
             )}
           </>
         ) : (
-          <div className="h-48 flex flex-col items-center justify-center text-[#002B40] space-y-4">
+          <div className="flex-1 flex flex-col items-center justify-center text-[#002B40] space-y-4">
             <div className="text-4xl font-light opacity-50">[ ]</div>
             <p className="text-xs tracking-widest">NO TRACK HOOKED</p>
           </div>
         )}
+      </div>
+
+      {/* Battery Doctrine Controls (Always Visible) */}
+      <div className="border-t border-[#002B40] bg-[#001A26]/50 p-3 mt-auto flex flex-col gap-2">
+        <div className="text-[10px] text-[#004466] uppercase tracking-tighter">Battery Doctrine</div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setIsAutoShorad(p => !p)} 
+            className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+          >
+            SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
+          </button>
+          <button 
+            onClick={() => setSalvoMode(p => !p)} 
+            className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+          >
+            FIRE: {salvoMode ? 'SALVO (2)' : 'SINGLE'}
+          </button>
+        </div>
       </div>
     </aside>
   );
@@ -1306,22 +1321,6 @@ export default function App() {
             <span className="text-[#00FF33] whitespace-nowrap">PAC-3: <span className="text-[#00E5FF]">{inventory.pac3}/32</span></span>
             <span className="text-[#00FF33] whitespace-nowrap">SHORAD: <span className="text-[#00E5FF]">{inventory.shorad}/24</span></span>
             <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
-            
-            {/* Toggles */}
-            <button 
-              onClick={() => setIsAutoShorad(p => !p)} 
-              className={`px-2 transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-            >
-              AUTO-SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
-            </button>
-            <button 
-              onClick={() => setSalvoMode(p => !p)} 
-              className={`px-2 transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-            >
-              DOCTRINE: {salvoMode ? 'SALVO (2)' : 'SINGLE (1)'}
-            </button>
-
-            <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
             <span className="text-[#FFCC00] whitespace-nowrap">DEFENSE COST: <span className="text-[#00E5FF]">${(defenseCost / 1000000).toFixed(2)}M</span></span>
             <span className="text-[#FFCC00] whitespace-nowrap">ENEMY COST: <span className="text-[#FF0033]">${(enemyCost / 1000000).toFixed(2)}M</span></span>
           </div>
@@ -1350,7 +1349,7 @@ export default function App() {
         </div>
 
         {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} />
+        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoShorad={isAutoShorad} setIsAutoShorad={setIsAutoShorad} salvoMode={salvoMode} setSalvoMode={setSalvoMode} />
       </main>
 
       {/* --- BOTTOM SOFT KEY BAR --- */}
