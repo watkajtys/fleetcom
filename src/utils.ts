@@ -16,7 +16,7 @@ export const calculateRange = (x1: number, y1: number, x2: number, y2: number) =
   Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
 
 export const calculateBearing = (x1: number, y1: number, x2: number, y2: number) => 
-  Math.round(Math.atan2(y2 - y1, x1 - x2) * (180 / Math.PI) + 90 + 360) % 360;
+  Math.round(Math.atan2(x2 - x1, -(y2 - y1)) * (180 / Math.PI) + 360) % 360;
 
 export const calculateKinematics = (track: Track) => {
   const spdNmSec = track.spd / 3600;

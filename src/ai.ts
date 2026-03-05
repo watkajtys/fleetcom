@@ -62,17 +62,16 @@ export const processFighters = (
 
     const MAX_DETECT_RANGE = 50;
     const WEAPON_RANGE = 18;
-    const searchRange = track.targetWaypoint ? WEAPON_RANGE : MAX_DETECT_RANGE;
 
     let bestTarget: Track | null = null;
-    let minRange = searchRange;
+    let minRange = MAX_DETECT_RANGE;
     let highestValue = -1;
 
     for (const hostile of hostiles) {
       if (currentlyTargetedIds.has(hostile.id)) continue; // Deconfliction: Someone else is shooting it
 
       const range = calculateRange(track.x, track.y, hostile.x, hostile.y);
-      if (range > searchRange) continue;
+      if (range > MAX_DETECT_RANGE) continue;
 
       // Conservation of Fires (Cost-Awareness)
       // Drones are cheap. Don't waste a $1.2M AMRAAM unless it's within 20NM of the Battery.
