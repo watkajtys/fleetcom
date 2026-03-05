@@ -9,8 +9,44 @@ import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSET
 import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate } from './utils';
 import { MISSION_STEPS } from './mission';
 import { processFighters } from './ai';
+import { useSyncExternalStore } from 'react';
 
-const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime, now }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number, now: number }) => {
+const nowStore = {
+  now: Date.now(),
+  listeners: new Set<() => void>(),
+  rafId: 0,
+  subscribe: (listener: () => void) => {
+    nowStore.listeners.add(listener);
+    if (nowStore.listeners.size === 1) {
+      nowStore.start();
+    }
+    return () => {
+      nowStore.listeners.delete(listener);
+      if (nowStore.listeners.size === 0) {
+        nowStore.stop();
+      }
+    };
+  },
+  getSnapshot: () => nowStore.now,
+  start: () => {
+    const tick = () => {
+      nowStore.now = Date.now();
+      nowStore.listeners.forEach(l => l());
+      nowStore.rafId = requestAnimationFrame(tick);
+    };
+    nowStore.rafId = requestAnimationFrame(tick);
+  },
+  stop: () => {
+    cancelAnimationFrame(nowStore.rafId);
+  }
+};
+
+function useNow() {
+  return useSyncExternalStore(nowStore.subscribe, nowStore.getSnapshot);
+}
+
+const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
+  const now = useNow();
   if (!interceptor.engagementTime || !interceptor.interceptDuration || interceptor.interceptTtl === undefined) return null;
   
   // 1. Calculate continuous progress based on original launch time
@@ -59,18 +95,18 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastS
 });
 
 const trackSymbolAreEqual = (
-  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number, now: number },
-  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number, now: number }
+  prevProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
+  nextProps: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
 ) => {
   if (prevProps.track !== nextProps.track) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
   if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
-  if (prevProps.now !== nextProps.now) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime, now }: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number, now: number }) => {
+const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime }: { track: Track, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
+  const now = useNow();
   if (track.detected === false) return null;
 
   const elapsed = (now - lastSweepTime) / 1000;
@@ -107,7 +143,7 @@ const TrackSymbol = React.memo(({ track, isHooked, cameraZoom, lastSweepTime, no
 
       {/* Missile Vectors & TTI */}
       {track.interceptors && track.interceptors.map((interceptor) => (
-        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} now={now} />
+        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} />
       ))}
 
       {/* Track History Breadcrumbs */}
@@ -500,17 +536,6 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
 export default function App() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [lastSweepTime, setLastSweepTime] = useState(Date.now());
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    let animationFrameId: number;
-    const tick = () => {
-      setNow(Date.now());
-      animationFrameId = requestAnimationFrame(tick);
-    };
-    animationFrameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
 
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
@@ -1179,7 +1204,6 @@ export default function App() {
                           isHooked={hookedTrackIds.includes(track.id)} 
                           cameraZoom={camera.zoom} 
                           lastSweepTime={lastSweepTime} 
-                          now={now}
                         />
                       );
                     })}
