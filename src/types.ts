@@ -11,6 +11,18 @@ export interface Interceptor {
   interceptTtl: number;
 }
 
+export interface DefendedAsset {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  type: 'AIRBASE' | 'PORT' | 'INFRA';
+  hasCram: boolean;
+  maxIntegrity: number;
+  integrity: number;
+  isDestroyed: boolean;
+}
+
 export interface Track {
   id: string;
   type: TrackType;
@@ -37,6 +49,7 @@ export interface Track {
   maxFuel?: number;
   targetWaypoint?: {x: number, y: number} | null;
   patrolWaypoint?: {x: number, y: number} | null;
+  targetId?: string;
 }
 
 export interface SystemLog {

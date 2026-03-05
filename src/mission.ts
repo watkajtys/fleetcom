@@ -1,5 +1,6 @@
 import { Track, TrackCategory, TrackType } from './types';
-import { BATTERY_POS } from './constants';
+import { BATTERY_POS, DEFENDED_ASSETS } from './constants';
+import { calculateBearing } from './utils';
 
 let trackIdCounter = 100;
 
@@ -21,10 +22,9 @@ export const createTargetTrack = (
   const startX = BATTERY_POS.x + distanceNm * Math.sin(radNav);
   const startY = BATTERY_POS.y - distanceNm * Math.cos(radNav);
 
-  // Add slight jitter to heading so they aren't all perfectly converging on the exact pixel
-  const exactHdgToBattery = (bearingFromBattery + 180) % 360;
-  const hdgJitter = (Math.random() - 0.5) * 10; 
-  const hdg = (exactHdgToBattery + hdgJitter + 360) % 360;
+  // Aim at a random defended asset in Dubai
+  const targetAsset = DEFENDED_ASSETS[Math.floor(Math.random() * DEFENDED_ASSETS.length)];
+  const hdg = calculateBearing(startX, startY, targetAsset.x, targetAsset.y);
 
   let prefix = 'TRK';
   if (category === 'UAS') prefix = 'U';
@@ -51,7 +51,8 @@ export const createTargetTrack = (
     coasting: false,
     interceptors: [],
     sensor,
-    detected: isDetected
+    detected: isDetected,
+    targetWaypoint: { x: targetAsset.x, y: targetAsset.y } // Assigned target asset
   };
 };
 
@@ -109,10 +110,10 @@ export const MISSION_STEPS: MissionEvent[] = [
     ]
   },
   {
-    time: 50,
-    message: 'WARNING RED. TBM WAVE 1. HIGH-ALTITUDE TRACKS DETECTED. EVALUATED HOSTILE MRBM. IMPACT DUBAI 90 SECONDS.',
+    time: 40,
+    message: 'WARNING RED. MULTIPLE MRBM TRACKS DETECTED. EVALUATED HOSTILE. FALLING THROUGH FL1500. IMPACT DUBAI 90 SECONDS.',
     type: 'ALERT',
-    generateTracks: () => Array.from({length: 2}).map(() => createTargetTrack(
+    generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack(
       'PENDING', 'TBM',
       340 + Math.random() * 20, 
       85 + Math.random() * 5,   
@@ -122,47 +123,71 @@ export const MISSION_STEPS: MissionEvent[] = [
     ))
   },
   {
-    time: 80,
-    message: 'WARNING RED. SWARM WAVE 1 DETECTED SEAWARD. EVALUATED MIXED UAS/CM.',
+    time: 70,
+    message: 'HUNTRESS: MULTI-DOMAIN ATTACK DETECTED. UAS SWARM INTERMIXED WITH SEA-SKIMMING CRUISE MISSILES INBOUND FROM THE GULF.',
     type: 'ALERT',
     generateTracks: () => [
-      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'UAS', 315 + Math.random() * 10, 60 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16')),
-      ...Array.from({length: 1}).map(() => createTargetTrack('PENDING', 'CM', 300 + Math.random() * 20, 65 + Math.random() * 2, 450 + Math.random() * 30, 300 + Math.random() * 200, 'L16'))
+      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'UAS', 315 + Math.random() * 20, 60 + Math.random() * 10, 150 + Math.random() * 20, 1500 + Math.random() * 500, 'LCL')),
+      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'CM', 320 + Math.random() * 10, 65 + Math.random() * 5, 500 + Math.random() * 30, 100 + Math.random() * 50, 'LCL'))
     ]
   },
   {
-    time: 83,
-    message: 'HUNTRESS: ADDITIONAL FAST-MOVERS DETECTED IN SWARM 1.',
+    time: 85,
+    message: 'WARNING RED. ROCKET SALVO DETECTED. EVALUATED POP-UP CONTACTS FROM COASTAL VESSELS. FALLING THROUGH FL250. TAMIR RECOMMENDED.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 6}).map(() => createTargetTrack(
+      'PENDING', 'ROCKET',
+      315 + Math.random() * 15, 
+      55 + Math.random() * 10,   
+      1400 + Math.random() * 100, 
+      25000 + Math.random() * 5000,
+      'LCL' 
+    ))
+  },
+  {
+    time: 126,
+    message: 'SYS: MULTIPLE UNCORRELATED LOW-ALTITUDE CONTACTS DETECTED CLEARING HAJAR MOUNTAIN RANGE.',
     type: 'WARN',
     generateTracks: () => [
-      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'UAS', 325 + Math.random() * 10, 62 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16')),
-      ...Array.from({length: 1}).map(() => createTargetTrack('PENDING', 'CM', 320 + Math.random() * 20, 67 + Math.random() * 2, 450 + Math.random() * 30, 300 + Math.random() * 200, 'L16'))
+        ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'CM', 100 + Math.random() * 20, 35 + Math.random() * 5, 500 + Math.random() * 30, 200, 'LCL')),
+        ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'UAS', 90 + Math.random() * 30, 40 + Math.random() * 10, 150, 1000, 'LCL'))
     ]
   },
   {
-    time: 86,
-    message: 'HUNTRESS: MORE SLOW-MOVERS EMERGING FROM CLUTTER.',
-    type: 'WARN',
-    generateTracks: () => [
-      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'UAS', 335 + Math.random() * 10, 64 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
-    ]
-  },
-  {
-    time: 90,
-    message: 'HUNTRESS: SCRAMBLE FALCON 23, 24 TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE.',
-    type: 'ACTION',
-    generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 310, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 45, y: 35} },
-      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 320, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 50, y: 35} }
-    ]
+    time: 130,
+    message: 'HUNTRESS: ANOTHER SWARM OF FAST MOVERS COMING OVER THE HAJAR MOUNTAINS. THIS IS ESCALATING BIG, BIG TIME.',
+    type: 'ALERT',
+    generateTracks: () => []
   },
   {
     time: 140,
-    message: 'WARNING RED. TBM WAVE 2. MULTIPLE LAUNCHES DETECTED. RECOMMEND PAC-3 / THAAD LAYERED DEFENSE.',
+    message: 'HUNTRESS: FALCON 23, 24. THIS IS AN ACTIVE AIR DEFENSE SCRAMBLE. SCRAMBLE IMMEDIATELY. VECTOR 090 TO HAJAR MOUNTAINS. YOU ARE FREE SUPERSONIC.',
     type: 'ALERT',
-    generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack(
+    generateTracks: () => [
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 90, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 85, y: 65} },
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 100, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 90, y: 65} }
+    ]
+  },
+  {
+    time: 170,
+    message: 'WARNING RED. SECOND ROCKET SALVO DETECTED. HEAVY VOLUME FROM NORTHERN WATERS. FALLING THROUGH FL300.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 12}).map(() => createTargetTrack(
+      'PENDING', 'ROCKET',
+      330 + Math.random() * 20,
+      65 + Math.random() * 10,
+      1400 + Math.random() * 100,
+      30000 + Math.random() * 5000,
+      'LCL'
+    ))
+  },
+  {
+    time: 210,
+    message: 'WARNING RED. ADDITIONAL MRBM TRACKS DETECTED. EVALUATED HOSTILE. FALLING THROUGH FL1600. LAYERED DEFENSE REQUIRED.',
+    type: 'ALERT',
+    generateTracks: () => Array.from({length: 5}).map(() => createTargetTrack(
       'PENDING', 'TBM',
-      345 + Math.random() * 15, 
+      350 + Math.random() * 15, 
       90 + Math.random() * 5,   
       4000 + Math.random() * 300, 
       160000 + Math.random() * 10000, 
@@ -170,82 +195,26 @@ export const MISSION_STEPS: MissionEvent[] = [
     ))
   },
   {
-    time: 155,
-    message: 'WARNING RED. INBOUND ROCKET SALVO DETECTED. ESTIMATED IMPACT DUBAI 45 SECONDS.',
-    type: 'ALERT',
-    generateTracks: () => Array.from({length: 8}).map(() => createTargetTrack(
-      'PENDING', 'ROCKET',
-      330 + Math.random() * 10,
-      40 + Math.random() * 5,
-      1200 + Math.random() * 100,
-      5000 + Math.random() * 2000,
-      'LCL'
+    time: 250,
+    message: 'HUNTRESS: SOUTHERN DESERT TRACKS PUSHING INTO ENGAGEMENT ZONE.',
+    type: 'WARN',
+    generateTracks: () => Array.from({length: 6}).map(() => createTargetTrack(
+      'PENDING', 'UAS',
+      200 + Math.random() * 20, 
+      70 + Math.random() * 10, 
+      130 + Math.random() * 10, 
+      1500 + Math.random() * 500, 
+      'L16'
     ))
   },
   {
-    time: 170,
-    message: 'WARNING RED. SWARM WAVE 2. MASSIVE UAS FORMATION EMERGING FROM CLUTTER. SATURATION ATTACK IMMINENT.',
-    type: 'ALERT',
-    generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'UAS', 310 + Math.random() * 10, 65 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
-  },
-  {
-    time: 176,
-    message: 'HUNTRESS: MORE BOGEYS POPPING UP. SWARM CONTINUES.',
-    type: 'WARN',
-    generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'UAS', 320 + Math.random() * 10, 68 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
-  },
-  {
-    time: 182,
-    message: 'HUNTRESS: FINAL WAVE OF SWARM 2 CLEARING RADAR HORIZON.',
-    type: 'WARN',
-    generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'UAS', 350 + Math.random() * 10, 77 + Math.random() * 5, 100 + Math.random() * 15, 200 + Math.random() * 300, 'L16'))
-  },
-  {
-    time: 200,
-    message: 'WARNING RED. SECOND ROCKET SALVO DETECTED. MULTIPLE SECTORS.',
+    time: 290,
+    message: 'INTEL: MASSIVE COORDINATED SALVO DETECTED. TOTAL SECTOR SATURATION IMMINENT. ALL LAYERS CLEAR TO ENGAGE.',
     type: 'ALERT',
     generateTracks: () => [
-      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'ROCKET', 310 + Math.random() * 10, 35 + Math.random() * 5, 1200, 4000, 'LCL')),
-      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'ROCKET', 10 + Math.random() * 10, 35 + Math.random() * 5, 1200, 4000, 'LCL'))
+      ...Array.from({length: 10}).map(() => createTargetTrack('PENDING', 'ROCKET', 315 + Math.random() * 45, 70 + Math.random() * 10, 1400, 25000, 'LCL')),
+      ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'TBM', 340 + Math.random() * 20, 85 + Math.random() * 10, 3900, 155000, 'L16')),
+      ...Array.from({length: 3}).map(() => createTargetTrack('PENDING', 'CM', 90 + Math.random() * 30, 40 + Math.random() * 5, 500, 100, 'LCL'))
     ]
-  },
-  {
-    time: 210,
-    message: 'WARNING RED. TBM WAVE 3. HEAVY SALVO DETECTED. BRACE FOR IMPACT.',
-    type: 'ALERT',
-    generateTracks: () => Array.from({length: 4}).map(() => createTargetTrack(
-      'PENDING', 'TBM',
-      330 + Math.random() * 30, 
-      85 + Math.random() * 10,   
-      3900 + Math.random() * 500, 
-      155000 + Math.random() * 15000, 
-      'L16'
-    ))
-  },
-  {
-    time: 250,
-    message: 'WARNING RED. VAMPIRE VAMPIRE VAMPIRE. FAST-MOVERS DETECTED FLANKING FROM THE EAST. EVALUATED SEA-SKIMMING CRUISE MISSILES.',
-    type: 'ALERT',
-    generateTracks: () => Array.from({length: 4}).map(() => createTargetTrack(
-      'PENDING', 'CM', 
-      90 + Math.random() * 20, // East
-      80 + Math.random() * 10,  
-      480 + Math.random() * 20, // Fast
-      100 + Math.random() * 50, // Sea-skimming
-      'L16'
-    ))
-  },
-  {
-    time: 280,
-    message: 'INTEL: FINAL ATTACK WAVE DETECTED. LARGE VOLUME UNKNOWN CATEGORY.',
-    type: 'ALERT',
-    generateTracks: () => Array.from({length: 15}).map(() => createTargetTrack(
-      'PENDING', Math.random() > 0.5 ? 'ROCKET' : 'UAS',
-      270 + Math.random() * 180,
-      50 + Math.random() * 10,
-      800 + Math.random() * 400,
-      2000 + Math.random() * 5000,
-      'LCL'
-    ))
   }
 ];

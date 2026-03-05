@@ -1,4 +1,4 @@
-import { Track } from './types';
+import { Track, DefendedAsset } from './types';
 
 // Central Dubai Defense Node
 export const BATTERY_POS = { x: 50, y: 60 };
@@ -12,13 +12,13 @@ export const WEAPON_STATS = {
   'AMRAAM': { range: 18, cost: 1200000, pk: 0.80, speedMach: 4.5 } // AIM-120D
 };
 
-export const DEFENDED_ASSETS = [
-  { id: 'DAL-1', name: 'Al Maktoum Int Airport (DWC)', x: 45, y: 67.5, type: 'AIRBASE', hasCram: false },
-  { id: 'DAL-2', name: 'Jebel Ali Port', x: 40, y: 60, type: 'PORT', hasCram: false },
-  { id: 'DAL-3', name: 'Burj Khalifa / Downtown', x: 55, y: 50, type: 'INFRA', hasCram: true },
-  { id: 'DAL-4', name: 'Al Minhad Air Base', x: 57.5, y: 62.5, type: 'AIRBASE', hasCram: true },
-  { id: 'DAL-5', name: 'Dubai Int Airport (DXB)', x: 60, y: 46, type: 'AIRBASE', hasCram: false },
-  { id: 'DAL-6', name: 'Port Rashid', x: 58, y: 43, type: 'PORT', hasCram: false }
+export const DEFENDED_ASSETS: DefendedAsset[] = [
+  { id: 'DAL-1', name: 'Al Maktoum Int Airport (DWC)', x: 45, y: 67.5, type: 'AIRBASE', hasCram: false, maxIntegrity: 100, integrity: 100, isDestroyed: false },
+  { id: 'DAL-2', name: 'Jebel Ali Port', x: 40, y: 60, type: 'PORT', hasCram: false, maxIntegrity: 75, integrity: 75, isDestroyed: false },
+  { id: 'DAL-3', name: 'Burj Khalifa / Downtown', x: 55, y: 50, type: 'INFRA', hasCram: true, maxIntegrity: 150, integrity: 150, isDestroyed: false },
+  { id: 'DAL-4', name: 'Al Minhad Air Base', x: 57.5, y: 62.5, type: 'AIRBASE', hasCram: true, maxIntegrity: 100, integrity: 100, isDestroyed: false },
+  { id: 'DAL-5', name: 'Dubai Int Airport (DXB)', x: 60, y: 46, type: 'AIRBASE', hasCram: false, maxIntegrity: 100, integrity: 100, isDestroyed: false },
+  { id: 'DAL-6', name: 'Port Rashid', x: 58, y: 43, type: 'PORT', hasCram: false, maxIntegrity: 75, integrity: 75, isDestroyed: false }
 ];
 
 // Scenario: Worst-Case Complex Coordinated Attack on Dubai

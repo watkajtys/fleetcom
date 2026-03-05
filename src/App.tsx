@@ -15,10 +15,17 @@ import AfterActionReport from './AfterActionReport';
 
 const nowStore = {
   now: Date.now(),
+  realTime: Date.now(),
+  isPaused: false,
   mouseCoords: { x: 0, y: 0 },
   timeListeners: new Set<() => void>(),
   mouseListeners: new Set<() => void>(),
   rafId: 0,
+
+  setPaused: (p: boolean) => {
+    nowStore.isPaused = p;
+    nowStore.realTime = Date.now();
+  },
   
   subscribeTime: (listener: () => void) => {
     nowStore.timeListeners.add(listener);
@@ -55,9 +62,17 @@ const nowStore = {
   },
 
   start: () => {
+    nowStore.realTime = Date.now();
     const tick = () => {
-      nowStore.now = Date.now();
-      nowStore.timeListeners.forEach(l => l());
+      const currentReal = Date.now();
+      const dt = currentReal - nowStore.realTime;
+      nowStore.realTime = currentReal;
+
+      if (!nowStore.isPaused) {
+        nowStore.now += dt;
+        nowStore.timeListeners.forEach(l => l());
+      }
+      
       nowStore.rafId = requestAnimationFrame(tick);
     };
     nowStore.rafId = requestAnimationFrame(tick);
@@ -80,16 +95,21 @@ const getZuluTimeStr = (offsetMs: number = 0) => {
   return now.toISOString().substring(11, 19) + 'Z';
 };
 
-const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
-  const now = useNow();
+const MissileVector = React.memo(({ interceptor, track, color, cameraZoom }: { interceptor: any, track: Track, color: string, cameraZoom: number }) => {
+  const _renderTrigger = useNow(); // Triggers the RAF loop
+  const currentSimTime = nowStore.now; // The actual physics time
+  const lastSweepTime = useTrackStore(state => state.lastSweepTime);
   if (!interceptor.engagementTime || !interceptor.interceptDuration || interceptor.interceptTtl === undefined) return null;
   
   // 1. Calculate continuous progress based on original launch time
-  const elapsedSinceLaunch = now - interceptor.engagementTime;
+  const elapsedSinceLaunch = currentSimTime - interceptor.engagementTime;
+  
+  if (elapsedSinceLaunch < 0) return null; // Still in the launcher queue
+
   const progress = Math.min(1, Math.max(0, elapsedSinceLaunch / interceptor.interceptDuration));
 
   // 2. Smooth TTI for the text display
-  const elapsedSinceLastSweep = (now - lastSweepTime) / 1000;
+  const elapsedSinceLastSweep = (currentSimTime - lastSweepTime) / 1000;
   const smoothTti = Math.max(0, interceptor.interceptTtl - elapsedSinceLastSweep);
 
   if (progress >= 1) return null;
@@ -132,20 +152,21 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastS
 import { useTrackStore } from './store';
 
 const trackSymbolAreEqual = (
-  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number, filters: any },
-  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number, filters: any }
+  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any },
+  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any }
 ) => {
   if (prevProps.trackId !== nextProps.trackId) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
-  if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
   if (prevProps.filters !== nextProps.filters) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime, filters }: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number, filters: any }) => {
+const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any }) => {
   const track = useTrackStore(state => state.tracks[trackId]);
-  const now = useNow();
+  const lastSweepTime = useTrackStore(state => state.lastSweepTime);
+  const _renderTrigger = useNow(); // This triggers the re-render loop
+  const currentSimTime = nowStore.now;
   if (!track || track.detected === false) return null;
 
   if (!filters.showUnknowns && (track.type === 'UNKNOWN' || track.type === 'PENDING')) return null;
@@ -153,7 +174,8 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime, 
   if (!filters.showNeutrals && (track.type === 'NEUTRAL' || track.type === 'ASSUMED_FRIEND')) return null;
   if (!filters.showHostiles && (track.type === 'HOSTILE' || track.type === 'SUSPECT')) return null;
 
-  const elapsed = (now - lastSweepTime) / 1000;
+  // Use the global sim time, not the component-local `now` snapshot, to prevent render/physics desync
+  const elapsed = (currentSimTime - lastSweepTime) / 1000;
   const smoothX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
   const smoothY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
 
@@ -171,7 +193,7 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime, 
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
       {/* Pairing Lines (Shooter to Target) - Show briefly on launch, or always if track is hooked */}
       {track.interceptors && track.interceptors.map((interceptor) => {
-        const age = now - interceptor.engagementTime;
+        const age = currentSimTime - interceptor.engagementTime;
         if (age > 1500 && !isHooked) return null;
         
         return (
@@ -187,7 +209,7 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime, 
 
       {/* Missile Vectors & TTI */}
       {track.interceptors && track.interceptors.map((interceptor) => (
-        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} lastSweepTime={lastSweepTime} />
+        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} />
       ))}
 
       {/* Track History Breadcrumbs */}
@@ -231,7 +253,7 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime, 
             <line x1={1.0 / cameraZoom} y1={1.0 / cameraZoom} x2={1.8 / cameraZoom} y2={1.8 / cameraZoom} stroke={color} strokeWidth={0.1 / cameraZoom} opacity="0.8" />
             <g transform={`translate(${2.2 / cameraZoom}, ${2.2 / cameraZoom})`}>
               <text x="0" y="0" fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" fontWeight="bold" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.threatName || track.id}</text>
-              <text x="0" y={1.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.alt >= 18000 ? `FL${Math.round(track.alt/100)}` : Math.round(track.alt/100).toString().padStart(3, '0')} / {Math.round(track.spd).toString().padStart(3, '0')}</text>
+              <text x="0" y={1.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.alt >= 18000 ? `FL${Math.round(track.alt/100)}` : `${Math.round(track.alt)} FT`} / {Math.round(track.spd).toString().padStart(3, '0')}</text>
               <text x="0" y={2.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>TQ: {track.tq} {track.coasting ? 'CST' : ''}</text>
             </g>
           </g>
@@ -249,22 +271,66 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
     </pattern>
     <rect x="-500" y="-500" width="1000" height="1000" fill="url(#grid)" />
 
-    {/* Dubai Coastline & Landmarks (Abstract/Angular Military Style) */}
-    {/* Main Coastline - Perfectly aligned through Jebel Ali (40, 60) and Port Rashid (58, 43) */}
+    {/* Regional Borders (Oman / UAE) */}
+    {/* Musandam Border (~50 NM North/East of Dubai, connecting East/West coasts) */}
+    <path d="M 82,-12 L 108,8" fill="none" stroke="#666666" strokeOpacity="0.8" strokeWidth={0.5 / cameraZoom} strokeDasharray={`${3 / cameraZoom} ${3 / cameraZoom}`} />
+    {/* Southern Border (Hatta region, connecting inland to East coast) */}
+    <path d="M 125,120 L 95,140 L 40,210" fill="none" stroke="#666666" strokeOpacity="0.8" strokeWidth={0.5 / cameraZoom} strokeDasharray={`${3 / cameraZoom} ${3 / cameraZoom}`} />
+    <text x="95" y="-5" fill="#666666" fontSize={0.8 / cameraZoom} fontFamily="monospace" opacity="0.8" transform="rotate(30 95 -5)">OMAN (MUSANDAM)</text>
+    <text x="60" y="160" fill="#666666" fontSize={1.0 / cameraZoom} fontFamily="monospace" opacity="0.8" transform="rotate(-50 60 160)">OMAN</text>
+
+    {/* UAE Peninsula Coastlines (West Coast / Persian Gulf & East Coast / Gulf of Oman) */}
     <path 
-      d="M -100,192 L 0,98 L 40,60 L 58,43 L 150,-44" 
+      d="M -150,250 
+         L -50,150 
+         L 20,80 
+         L 35,65 
+         L 32,62 L 35,60 L 38,62 L 40,60 
+         L 45,55 
+         L 43,52 L 45,50 L 47,52 L 48,53 
+         L 52,49 
+         L 58,43 
+         L 56,40 L 58,39 L 60,42 
+         L 68,34 
+         L 75,15 
+         L 80,-10 
+         L 85,-40 
+         L 90,-50 
+         L 110,10 
+         L 120,40 
+         L 128,100 
+         L 145,250" 
       fill="none" 
       stroke="#FFFFFF" 
-      strokeOpacity="0.4"
+      strokeOpacity="0.8"
       strokeWidth={0.4 / cameraZoom} 
     />
+
+    {/* Iranian Coastline (Northern Gulf ~75-80NM from Dubai) */}
+    <path 
+      d="M -150,-20 
+         L -50,-60 
+         L 0,-70 
+         L 50,-80 
+         L 80,-110 
+         L 150,-130" 
+      fill="none" 
+      stroke="#FFFFFF" 
+      strokeOpacity="0.5"
+      strokeWidth={0.4 / cameraZoom} 
+    />
+    <text x="-20" y="-80" fill="#666666" fontSize={1.0 / cameraZoom} fontFamily="monospace" opacity="0.8" transform="rotate(-15 -20 -80)">IRAN (MAINLAND)</text>
     
-    {/* Palm Jebel Ali (Abstract Square) - Offshore from Jebel Ali */}
-    <path d="M 36,57 L 38,55 L 40,57 L 38,59 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
-    {/* Palm Jumeirah (Abstract Square) - Halfway between ports */}
-    <path d="M 44,49 L 46,47 L 48,49 L 46,51 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
-    {/* The World Islands (Abstract Polygon) - Offshore from Port Rashid */}
-    <path d="M 49,42 L 52,40 L 54,43 L 51,44 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    {/* The World Islands (Abstract Polygon) */}
+    <path d="M 51,46 L 53,44 L 55,46 L 53,48 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.8" strokeWidth={0.2 / cameraZoom} />
+
+    {/* Hajar Mountains (Eastern Topo Lines) - Constrained strictly between the coasts */}
+    <g opacity="0.5" stroke="#FFFFFF" strokeWidth={0.3 / cameraZoom} fill="none">
+      <path d="M 105,10 Q 100,40 105,80 Q 110,120 115,180" />
+      <path d="M 110,15 Q 105,45 110,85 Q 115,125 120,185" />
+      <path d="M 115,20 Q 110,50 115,90 Q 120,130 125,190" />
+      <text x="110" y="70" fill="#FFFFFF" fontSize={1.0 / cameraZoom} fontFamily="monospace" stroke="none" transform="rotate(75 110 70)">HAJAR MOUNTAINS</text>
+    </g>
 
     {/* Defended Urban Footprint (Dubai Metropolitan Area) - Aligned to coast */}
     <path d="M 40,60 L 58,43 L 63,49 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
@@ -276,18 +342,20 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
     </g>
 
     {/* Concentric Range Rings & Azimuth Lines */}
-    <g transform={`translate(${BATTERY_POS.x}, ${BATTERY_POS.y})`} stroke="#002B40" strokeWidth={0.1 / cameraZoom} opacity="0.6">
+    <g transform={`translate(${BATTERY_POS.x}, ${BATTERY_POS.y})`} stroke="#002B40" strokeWidth={0.1 / cameraZoom} opacity="0.8">
       {/* Azimuth Lines every 30 degrees */}
       {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map(deg => (
-        <line key={`az-${deg}`} x1="0" y1="0" x2={Math.sin(deg * Math.PI / 180) * 100} y2={-Math.cos(deg * Math.PI / 180) * 100} />
+        <line key={`az-${deg}`} x1="0" y1="0" x2={Math.sin(deg * Math.PI / 180) * 150} y2={-Math.cos(deg * Math.PI / 180) * 150} />
       ))}
-      {/* Range Rings: 10NM, 20NM, 50NM */}
+      {/* Range Rings: 10NM, 20NM, 50NM, 100NM */}
       <circle cx="0" cy="0" r="10" fill="none" />
-      <text x="0" y="-10.5" fill="#002B40" fontSize={0.8 / cameraZoom} textAnchor="middle">10NM</text>
+      <text x="1.5" y="-10" fill="#00E5FF" fontSize={1.5 / cameraZoom} fontFamily="monospace" fontWeight="bold" opacity="0.7" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }} textAnchor="start" alignmentBaseline="middle">10NM</text>
       <circle cx="0" cy="0" r="20" fill="none" />
-      <text x="0" y="-20.5" fill="#002B40" fontSize={0.8 / cameraZoom} textAnchor="middle">20NM</text>
+      <text x="1.5" y="-20" fill="#00E5FF" fontSize={1.5 / cameraZoom} fontFamily="monospace" fontWeight="bold" opacity="0.7" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }} textAnchor="start" alignmentBaseline="middle">20NM</text>
       <circle cx="0" cy="0" r="50" fill="none" />
-      <text x="0" y="-50.5" fill="#002B40" fontSize={0.8 / cameraZoom} textAnchor="middle">50NM</text>
+      <text x="1.5" y="-50" fill="#00E5FF" fontSize={1.5 / cameraZoom} fontFamily="monospace" fontWeight="bold" opacity="0.7" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }} textAnchor="start" alignmentBaseline="middle">50NM</text>
+      <circle cx="0" cy="0" r="100" fill="none" strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
+      <text x="1.5" y="-100" fill="#00E5FF" fontSize={1.5 / cameraZoom} fontFamily="monospace" fontWeight="bold" opacity="0.7" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }} textAnchor="start" alignmentBaseline="middle">100NM</text>
     </g>
 
     {/* Bullseye Reference Point */}
@@ -315,24 +383,29 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
   </>
 ));
 
-const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
+const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => {
+  const assets = useTrackStore(state => state.assets);
+  
+  return (
   <>
-    {DEFENDED_ASSETS.map(asset => (
+    {Object.values(assets).map(asset => {
+      const color = asset.isDestroyed ? '#FF0033' : '#00E5FF';
+      return (
       <g key={asset.id} transform={`translate(${asset.x}, ${asset.y})`}>
-        <rect x={-0.8 / cameraZoom} y={-0.8 / cameraZoom} width={1.6 / cameraZoom} height={1.6 / cameraZoom} fill="none" stroke="#00E5FF" strokeWidth={0.2 / cameraZoom} />
-        <text x={1.2 / cameraZoom} y={0.5 / cameraZoom} fill="#00E5FF" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.7">
-          {asset.name}
+        <rect x={-0.8 / cameraZoom} y={-0.8 / cameraZoom} width={1.6 / cameraZoom} height={1.6 / cameraZoom} fill={asset.isDestroyed ? '#FF0033' : 'none'} fillOpacity={asset.isDestroyed ? 0.3 : 1} stroke={color} strokeWidth={0.2 / cameraZoom} />
+        <text x={1.2 / cameraZoom} y={0.5 / cameraZoom} fill={color} fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity={asset.isDestroyed ? 1 : 0.7}>
+          {asset.isDestroyed ? `[DESTROYED] ${asset.name}` : asset.name}
         </text>
-        {asset.hasCram && (
+        {asset.hasCram && !asset.isDestroyed && (
           <>
             <circle cx="0" cy="0" r="2.5" fill="none" stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} opacity="0.5" />
             <text x="0" y="-2.8" fill="#00E5FF" fontSize={0.5 / cameraZoom} fontFamily="monospace" opacity="0.5" textAnchor="middle">C-RAM</text>
           </>
         )}
       </g>
-    ))}
+    )})}
   </>
-));
+)});
 
 const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filters, setFilters }: { hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
   const tracksMap = useTrackStore(state => state.tracks);
@@ -384,7 +457,7 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
           </thead>
           <tbody className="divide-y divide-[#001A26]">
             {tracks.map(t => {
-              const range = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1);
+              const range = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0).toFixed(1);
               const isHooked = hookedTrackIds.includes(t.id);
               let typeColor = 'text-[#FFFF00]';
               if (t.type === 'FRIEND') typeColor = 'text-[#00FF33]';
@@ -408,7 +481,7 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
                   <td className={`py-2 px-2 font-bold ${typeColor} truncate`}>{t.threatName ? t.threatName.substring(0, 4).toUpperCase() : t.type.substring(0, 4)}</td>
                   <td className="py-2 px-2 text-[#00E5FF] truncate">{t.category}</td>
                   <td className="py-2 px-2 text-[#00E5FF] text-right tabular-nums">{range.padStart(4, '0')}</td>
-                  <td className="py-2 px-3 text-[#00E5FF] text-right tabular-nums">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : Math.round(t.alt/100).toString().padStart(3, '0')}</td>
+                  <td className="py-2 px-3 text-[#00E5FF] text-right tabular-nums">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : `${Math.round(t.alt)} FT`}</td>
                 </tr>
               );
             })}
@@ -473,9 +546,9 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
 
   const kinematics = hookedTrack ? calculateKinematics(hookedTrack) : null;
   const brg = hookedTrack ? calculateBearing(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y).toString().padStart(3, '0') : '';
-  const rng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1).padStart(4, '0') : '';
+  const rng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y, hookedTrack.alt, 0).toFixed(1).padStart(4, '0') : '';
   const bullBrg = hookedTrack ? calculateBearing(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y).toString().padStart(3, '0') : '';
-  const bullRng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y).toFixed(0).padStart(3, '0') : '';
+  const bullRng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y, hookedTrack.alt, 0).toFixed(0).padStart(3, '0') : '';
 
   return (
     <aside className={`w-[300px] bg-[#001A26]/20 backdrop-blur-md border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-colors duration-300 h-fit pb-0`}>
@@ -541,7 +614,7 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                 
                 <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">ALTITUDE</div>
                 <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold tabular-nums">
-                  {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : hookedTrack.alt.toString().padStart(5, '0')} FT
+                  {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : `${Math.round(hookedTrack.alt).toString().padStart(5, '0')} FT`}
                 </div>
 
                 <div className="border-r border-[#002B40] p-2 text-[#004466] flex flex-col">
@@ -604,18 +677,6 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
             <div className="flex-1 flex flex-col items-center justify-center text-[#002B40] space-y-4">
               <div className="text-4xl font-light opacity-50">[ ]</div>
               <p className="text-xs tracking-widest">NO TRACK HOOKED</p>
-            </div>
-
-            {/* Battery Doctrine Controls (Empty State Only) */}
-            <div className="flex flex-col gap-2 mt-auto">
-              <div className="text-[10px] text-[#004466] font-bold whitespace-nowrap">GLOBAL DOCTRINE</div>
-              <button 
-                onClick={() => setIsAutoTamir(p => !p)} 
-                className={`h-10 px-4 flex flex-col items-center justify-center text-[10px] lg:text-xs font-bold tracking-widest transition-colors border ${isAutoTamir ? 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]' : 'bg-[#001A26] border-[#004466] text-[#00E5FF] hover:bg-[#002B40]'}`}
-              >
-                <span className={`text-[8px] mb-0.5 ${isAutoTamir ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>8</span>
-                AUTO-TAMIR: {isAutoTamir ? 'FREE' : 'HOLD'}
-              </button>
             </div>
           </div>
         )}
@@ -754,8 +815,6 @@ export default function App() {
   const addTracks = useTrackStore(state => state.addTracks);
   const setTracks = useTrackStore(state => state.setTracks);
 
-  const [lastSweepTime, setLastSweepTime] = useState(Date.now());
-
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
     { id: 'initial-1', time: getZuluTimeStr(-120000), message: 'SYS: JIAMD NODE INITIALIZED', type: 'INFO', acknowledged: true },
@@ -773,6 +832,10 @@ export default function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [splashes, setSplashes] = useState<{ id: string, x: number, y: number, time: number }[]>([]);
   const simTimeRef = useRef(0);
+
+  useEffect(() => {
+    nowStore.setPaused(isPaused);
+  }, [isPaused]);
 
   const incrementInterceptorsFired = useTrackStore(state => state.incrementInterceptorsFired);
   const addLeaker = useTrackStore(state => state.addLeaker);
@@ -834,7 +897,8 @@ export default function App() {
       if (isPaused) return;
       simTimeRef.current += 1;
 
-      if (simTimeRef.current >= 550) {
+      const hasHostiles = useTrackStore.getState().getAllTracks().some(t => t.type === 'HOSTILE' || t.type === 'SUSPECT' || (t.type === 'PENDING' && t.category !== 'FW'));
+      if (simTimeRef.current >= 550 || (simTimeRef.current >= 300 && !hasHostiles)) {
         setIsGameOver(true);
       }
 
@@ -866,6 +930,9 @@ export default function App() {
       const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
 
       setTracks(currentTracks => {
+        const currentSimTime = nowStore.now;
+        const actualElapsedSecs = Math.max(0.1, Math.min((currentSimTime - useTrackStore.getState().lastSweepTime) / 1000, 5.0)); // Cap to prevent large jumps
+        
         events.length = 0; // Clear events to prevent duplicates in React Strict Mode double-invocations
 
         // 1. Progress intercepts and identify splashes/misses
@@ -873,7 +940,7 @@ export default function App() {
           if (t.interceptors && t.interceptors.length > 0) {
             const updatedInterceptors = t.interceptors.map(i => ({
               ...i,
-              interceptTtl: Math.max(0, i.interceptTtl - 3)
+              interceptTtl: Math.max(0, i.interceptTtl - actualElapsedSecs)
             }));
             return { ...t, interceptors: updatedInterceptors };
           }
@@ -883,13 +950,12 @@ export default function App() {
         // Evaluate Impacts
         const destroyedTrackIds = new Set<string>();
 
-        nextTracks.forEach(t => {
-          if (!t.interceptors) return;
-          
-          t.interceptors.forEach(interceptor => {
-            if (interceptor.interceptTtl === 0 && !destroyedTrackIds.has(t.id)) {
-              // Stochastic Pk Check with absolute safety fallback to prevent crashes
-              const weaponKey = interceptor.weapon as keyof typeof WEAPON_STATS;
+                nextTracks.forEach(t => {
+                  if (!t.interceptors) return;
+        
+                  t.interceptors.forEach(interceptor => {
+                    if (interceptor.interceptTtl <= 0 && !destroyedTrackIds.has(t.id)) {
+                      // Stochastic Pk Check with absolute safety fallback to prevent crashes              const weaponKey = interceptor.weapon as keyof typeof WEAPON_STATS;
               const stats = WEAPON_STATS[weaponKey];
               const pkValue = stats?.pk ?? 0.8; // Extremely safe extraction
               const roll = Math.random();
@@ -979,47 +1045,73 @@ export default function App() {
             }
           } else {
             // Dynamic Profiles for Non-Fighter Tracks
-            const distToBattery = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+            const distToBattery = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y, track.alt, 0);
             
-            // Tactical Inbound Boost: 
-            // To keep gameplay fast, distant threats accelerate to Mach 2.5 until they are within 40NM.
-            if (distToBattery > 40 && track.type === 'HOSTILE') {
-              newSpd = 1500; 
-            }
-
             if (track.id === 'FLT-EK404') {
               // Hijack Profile: Aggressive descent to evade radar, throttle up
               if (newAlt > 5000) newAlt = Math.max(5000, newAlt - 500); // 10,000 ft/min emergency descent
               if (newSpd < 650) newSpd += 10; 
             } else if (track.category === 'TBM') {
               // Ballistic Profile: Exospheric cruise, then terminal hypersonic dive
-              const distToCity = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
-              if (distToCity < 40) {
-                // Terminal phase: pitch down, bleed altitude massively, accelerate
-                newAlt = Math.max(0, newAlt - 12000); // 4000 ft/sec descent
-                if (newSpd < 6000) newSpd += 250;
+              const distToTarget2D = track.targetWaypoint ? calculateRange(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y) : calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+              
+              if (distToTarget2D < 45) {
+                // Terminal phase: Altitude is locked to remaining distance to mathematically guarantee impact
+                newAlt = Math.max(0, (distToTarget2D / 45) * 150000); 
+                if (newSpd < 6000) newSpd += 400 * (actualElapsedSecs / 3.0);
+              } else {
+                // High-altitude ballistic arc bleed
+                newAlt = Math.max(150000, newAlt - 100 * (actualElapsedSecs / 3.0)); 
               }
             } else if (track.category === 'CM') {
-              // Cruise Missile: Sea-skimming terrain following
-              newAlt = Math.max(50, 100 + (Math.random() * 40 - 20)); // Jitter between 80-120ft
+              // Cruise Missile: Sea-skimming terrain following with slight jitter
+              newAlt = Math.max(50, 100 + (Math.random() * 40 - 20)); 
             } else if (track.category === 'ROCKET') {
-              // Rocket Salvo: Fast, unguided, steady descent
-              newAlt = Math.max(0, newAlt - 50); 
+              // Rocket Salvo: Ballistic arc scaling with distance
+              const distToTarget2D = track.targetWaypoint ? calculateRange(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y) : calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+              newAlt = Math.max(0, Math.min(newAlt, (distToTarget2D / 40) * 30000));
             } else if (track.category === 'UAS') {
-              // Drone Swarm: Slight altitude and heading weave to complicate targeting
+              // Drone Swarm: Slight altitude weave, and steer toward target asset
               newAlt = Math.max(100, track.alt + (Math.random() * 20 - 10));
-              newHdg = (newHdg + (Math.random() * 4 - 2) + 360) % 360;
+              
+              if (track.targetWaypoint) {
+                const desiredHdg = calculateBearing(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y);
+                let hdgDiff = desiredHdg - newHdg;
+                if (hdgDiff > 180) hdgDiff -= 360;
+                if (hdgDiff < -180) hdgDiff += 360;
+                // Slow drones turn slowly
+                newHdg = (newHdg + Math.max(-2, Math.min(2, hdgDiff)) * (actualElapsedSecs / 3.0) + 360) % 360;
+              }
+            }
+
+            // Cruise Missile Steering (Guided LACM)
+            if (track.category === 'CM' && track.targetWaypoint) {
+              const desiredHdg = calculateBearing(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y);
+              let hdgDiff = desiredHdg - newHdg;
+              if (hdgDiff > 180) hdgDiff -= 360;
+              if (hdgDiff < -180) hdgDiff += 360;
+              // Cruise missiles steer aggressively
+              newHdg = (newHdg + Math.max(-10, Math.min(10, hdgDiff)) * (actualElapsedSecs / 3.0) + 360) % 360;
             }
           }
 
-          const speedFactor = newSpd / 1200; 
-          const rad = newHdg * (Math.PI / 180);
-          let newX = track.x + Math.sin(rad) * speedFactor;
-          let newY = track.y - Math.cos(rad) * speedFactor;
-
-          const isStealthy = track.category === 'UAS' || track.alt < 1000;
-          const rangeToBattery = calculateRange(newX, newY, BATTERY_POS.x, BATTERY_POS.y);
-          const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(track.alt));
+                    const speedFactor = (newSpd / 3600) * actualElapsedSecs;
+                    const rad = newHdg * (Math.PI / 180);
+                    let newX = track.x + Math.sin(rad) * speedFactor;
+                    let newY = track.y - Math.cos(rad) * speedFactor;
+          
+                    // Prevent threats from flying past their target. Stop horizontal motion if they reached it.
+                    if (track.targetWaypoint && (track.category === 'TBM' || track.category === 'ROCKET' || track.category === 'CM' || track.category === 'UAS')) {
+                      const distToWaypoint = calculateRange(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y, 0, 0); // 2D distance
+                      if (distToWaypoint <= speedFactor) {
+                        newX = track.targetWaypoint.x;
+                        newY = track.targetWaypoint.y;
+                        newSpd = 0; // Arrest horizontal speed, let it drop/detonate
+                      }
+                    }
+          
+                    const isStealthy = track.category === 'UAS' || track.alt < 1000;          const rangeToBattery = calculateRange(newX, newY, BATTERY_POS.x, BATTERY_POS.y, newAlt, 0);
+          const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(newAlt));
           const isDetected = track.sensor === 'L16' || rangeToBattery <= radarHorizonNm;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
@@ -1027,7 +1119,7 @@ export default function App() {
         });
 
         // 3. Fighter AI (VID, Targeting, and Auto-Engagement)
-        nextTracks = processFighters(nextTracks, events, Date.now());
+        nextTracks = processFighters(nextTracks, events, currentSimTime);
 
                 // 4. Cleanup and RTB
                 nextTracks = nextTracks.map(track => {
@@ -1046,9 +1138,11 @@ export default function App() {
         
                 // 4.5 Automatic TAMIR Point Defense (Weapons Free)
                 let currentTamir = inventoryRef.current.tamir;
+                let autoTamirShotsFiredThisSweep = 0;
+                
                 nextTracks = nextTracks.map(t => {
                   if (isAutoTamirRef.current && t.type === 'HOSTILE' && (t.category === 'UAS' || t.category === 'ROCKET') && t.alt <= 30000 && currentTamir > 0) {
-                    const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y);
+                    const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0);
                     // Check if within 35NM TAMIR (Iron Dome) WEZ and not already being shot at by Battery
                     const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
                     
@@ -1069,15 +1163,19 @@ export default function App() {
                         events.push({ type: 'COST', amount: WEAPON_STATS['TAMIR'].cost });
                         
                         const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['TAMIR'].speedMach);
-                        // Stagger intercept times slightly for visual clarity on double taps
-                        const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (i * 0.5); 
+                        
+                        // Ripple fire cadence: 300ms per shot across the entire sweep
+                        const shotDelayMs = (autoTamirShotsFiredThisSweep * 300);
+                        autoTamirShotsFiredThisSweep++;
+                        
+                        const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (shotDelayMs / 1000); 
                         
                         newInterceptors.push({
-                          id: `TAMIR-AUTO-${Date.now()}-${Math.random()}`,
+                          id: `TAMIR-AUTO-${currentSimTime}-${Math.random()}`,
                           weapon: 'TAMIR' as const,
                           shooterId: 'BATTERY',
                           launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
-                          engagementTime: Date.now() + (i * 500), // Physical launch stagger
+                          engagementTime: currentSimTime + shotDelayMs, // Physical launch stagger
                           interceptDuration: interceptTimeSecs * 1000,
                           interceptTtl: Math.ceil(interceptTimeSecs)
                         });
@@ -1100,22 +1198,22 @@ export default function App() {
                     for (const asset of DEFENDED_ASSETS) {
                       if (!asset.hasCram) continue;
                       
-                      const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y);
+                      const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y, t.alt, 0);
                       if (rngToAsset <= 2.5) {
                         incrementInterceptorsFired('C-RAM');
                         const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
                         events.push({ type: 'LOG', message: `CIWS (${asset.id}) ENGAGING LEAKER TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
                         events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
                         
-                        const closureRate = calculateClosureRate({x: asset.x, y: asset.y}, t, WEAPON_STATS['C-RAM'].speedMach);
+                        const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, t, WEAPON_STATS['C-RAM'].speedMach);
                         const interceptTimeSecs = rngToAsset / Math.max(0.1, closureRate);
                         
                         const newInterceptor = {
-                          id: `CIWS-${Date.now()}-${Math.random()}`,
+                          id: `CIWS-${currentSimTime}-${Math.random()}`,
                           weapon: 'C-RAM' as const,
                           shooterId: 'CIWS',
                           launchPos: { x: asset.x, y: asset.y }, // Launch from the asset, not the battery
-                          engagementTime: Date.now(),
+                          engagementTime: currentSimTime,
                           interceptDuration: interceptTimeSecs * 1000,
                           interceptTtl: Math.ceil(interceptTimeSecs)
                         };
@@ -1126,48 +1224,95 @@ export default function App() {
                   return t;
                 });
 
-                // 5. Leaker Detection (Impacts on Dubai)
-                const impactedTrackIds = new Set<string>();
-                nextTracks.forEach(t => {
-                  if (t.type === 'HOSTILE' || t.type === 'SUSPECT') {
-                    DEFENDED_ASSETS.forEach(asset => {
-                      const dist = calculateRange(t.x, t.y, asset.x, asset.y);
-                      // 2.5 NM threshold because fast TBMs jump ~3.3NM per 3s sweep
-                      if (dist < 2.5) {
-                        impactedTrackIds.add(t.id);
-                        events.push({ 
-                          type: 'LOG', 
-                          message: `!!! IMPACT: ${asset.name} STRUCK BY ${t.id} !!!`, 
-                          logType: 'ALERT' 
-                        });
-                        events.push({ type: 'IMPACT', assetId: asset.id } as any);
-                      }
-                    });
-                  }
-                });
-        
-                return nextTracks.filter(t =>
-                  !impactedTrackIds.has(t.id) &&
-                  !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 57.5, 62.5) < 2) &&
+                                                // 5. Leaker Detection (Impacts on Dubai)
+                                                const impactedTracks: { trackId: string, assetId: string | null, damage: number, x: number, y: number }[] = [];
+                                                nextTracks.forEach(t => {
+                                                  if (t.type === 'HOSTILE' || t.type === 'SUSPECT') {
+                                                    let hitAsset = false;
+                                                    for (const assetId in assetsRef.current) {
+                                                      const asset = assetsRef.current[assetId];
+                                                      const dist = calculateRange(t.x, t.y, asset.x, asset.y, t.alt, 0);
+                                                      
+                                                      // 2.5 NM threshold because fast TBMs jump ~3.3NM per 3s sweep
+                                                      // Altitude must also be near ground level to count as an impact
+                                                      if (dist < 2.5 && t.alt < 2000) {
+                                                        let damage = 10; // Default UAS
+                                                        if (t.category === 'TBM') damage = 100;
+                                                        if (t.category === 'CM') damage = 50;
+                                                        if (t.category === 'ROCKET') damage = 20;
+                                
+                                                        impactedTracks.push({ trackId: t.id, assetId: asset.id, damage, x: t.x, y: t.y });
+                                                        events.push({ type: 'IMPACT', assetId: asset.id, damage, trackId: t.id, x: t.x, y: t.y } as any);
+                                                        hitAsset = true;
+                                                        break; // Stop checking other assets for this track
+                                                      }
+                                                    }
+                                
+                                                    // If it reached the ground (or is a CM that reached its target waypoint) and didn't hit a specific asset
+                                                    if (!hitAsset) {
+                                                      const isBallisticGroundHit = (t.category === 'TBM' || t.category === 'ROCKET') && t.alt <= 100;
+                                                      const isSteeredGroundHit = (t.category === 'CM' || t.category === 'UAS') && t.targetWaypoint && calculateRange(t.x, t.y, t.targetWaypoint.x, t.targetWaypoint.y) < 1.0;
+                                                      
+                                                      if (isBallisticGroundHit || isSteeredGroundHit) {
+                                                        impactedTracks.push({ trackId: t.id, assetId: null, damage: 0, x: t.x, y: t.y });
+                                                        
+                                                        // Mathematically check if it fell within the green "Defended Metro Area" polygon
+                                                        // The center of that polygon is roughly x: 51, y: 54. We'll use a 12 NM radius for the metro area.
+                                                        const distToMetroCenter = calculateRange(t.x, t.y, 51, 54);
+                                                        const isPopulated = distToMetroCenter <= 12;
+
+                                                        events.push({ type: 'GROUND_IMPACT', trackId: t.id, x: t.x, y: t.y, isPopulated } as any);
+                                                      }
+                                                    }
+                                                  }
+                                                });
+                                        
+                                                const impactedTrackIds = new Set(impactedTracks.map(it => it.trackId));                
+                                return nextTracks.filter(t =>
+                                  !impactedTrackIds.has(t.id) &&                  !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 57.5, 62.5) < 2) &&
                   t.x >= -100 && t.x <= 200 && t.y >= -100 && t.y <= 200
-                );      });
+                );      }, nowStore.now);
 
       events.forEach(e => {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
         if (e.type === 'COST') addDefenseCost(e.amount!);
         if (e.type === 'AMRAAM_FIRED') incrementInterceptorsFired('AMRAAM');
         if (e.type === 'IMPACT') {
-          addLeaker((e as any).assetId);
+          const { assetId, damage, trackId, x, y } = e as any;
+          const { currentIntegrity, destroyed } = useTrackStore.getState().applyDamage(assetId, damage);
+          const asset = useTrackStore.getState().assets[assetId];
+          
+          addLeaker();
+          
+          // Generate a ground splash
+          setSplashes(prev => [...prev, { id: `impact-${Date.now()}-${Math.random()}`, x, y, time: Date.now() }]);
+          
+          if (destroyed) {
+            addLog(`!!! CRITICAL: ${asset.name} DESTROYED BY ${trackId} !!!`, 'ALERT');
+          } else {
+            const pct = Math.round((currentIntegrity / asset.maxIntegrity) * 100);
+            addLog(`IMPACT: ${asset.name} STRUCK BY ${trackId}. INTEGRITY AT ${pct}%.`, 'ALERT');
+          }
         }
         if ((e as any).type === 'SPLASH') {
+          // Mid-air intercept splash
           setSplashes(prev => [...prev, { id: `splash-${Date.now()}-${Math.random()}`, x: (e as any).x, y: (e as any).y, time: Date.now() }]);
         }
+        if ((e as any).type === 'GROUND_IMPACT') {
+          const { x, y, trackId, isPopulated } = e as any;
+          if (isPopulated) {
+            addLog(`WARNING: ${trackId} IMPACTED WITHIN METROPOLITAN AREA. CIVILIAN CASUALTIES LIKELY.`, 'ALERT');
+            // We'll also count this as a leaker for the final score, since the goal is to protect the city
+            addLeaker();
+          } else {
+            addLog(`IMPACT: ${trackId} DETONATED IN UNPOPULATED TERRAIN.`, 'INFO');
+          }
+          setSplashes(prev => [...prev, { id: `ground-${Date.now()}-${Math.random()}`, x, y, time: Date.now() }]);
+        }
       });
+    }, 3000);
 
-            setLastSweepTime(Date.now());
-          }, 3000);
-      
-          return () => {
+    return () => {
             clearInterval(clockTimer);
             clearInterval(sweepTimer);
           };
@@ -1187,7 +1332,8 @@ export default function App() {
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const coords = getMapCoords(e, e.currentTarget);
-    const elapsed = (Date.now() - lastSweepTime) / 1000;
+    const lastSweepTime = useTrackStore.getState().lastSweepTime;
+    const elapsed = (nowStore.now - lastSweepTime) / 1000;
 
     if (vectoringTrackId) {
       setTracks(current => current.map(t => 
@@ -1282,7 +1428,8 @@ export default function App() {
       const x2 = Math.max(selectionBox.startX, selectionBox.endX);
       const y1 = Math.min(selectionBox.startY, selectionBox.endY);
       const y2 = Math.max(selectionBox.startY, selectionBox.endY);
-      const elapsed = (Date.now() - lastSweepTime) / 1000;
+      const lastSweepTime = useTrackStore.getState().lastSweepTime;
+      const elapsed = (nowStore.now - lastSweepTime) / 1000;
 
       // Identify tracks in box
       const inBox = useTrackStore.getState().getAllTracks()
@@ -1435,7 +1582,7 @@ export default function App() {
               if (weapon === 'PAC-3' && currentPac3 <= 0) return;        if (weapon === 'TAMIR' && currentTamir <= 0) return;
         if (weapon === 'THAAD' && currentThaad <= 0) return;
   
-        const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y);
+        const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y, target.alt, 0);
         if (rng > stats.range) return;
   
         // Deduct from local count for this loop
@@ -1462,16 +1609,17 @@ export default function App() {
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
         
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
+        const currentSimTime = nowStore.now;
 
         setTracks(current => current.map(t => {
           if (t.id === id) {
              const interceptTimeSecs = (rng / Math.max(0.1, closureRate));
              const newInterceptor = {
-               id: `${weapon}-${Date.now()}-${Math.random()}`,
+               id: `${weapon}-${currentSimTime}-${Math.random()}`,
                weapon,
                shooterId: 'BATTERY',
                launchPos,
-               engagementTime: Date.now(),
+               engagementTime: currentSimTime,
                interceptDuration: interceptTimeSecs * 1000,
                interceptTtl: Math.ceil(interceptTimeSecs)
              };
@@ -1490,12 +1638,15 @@ export default function App() {
   const unackAlertsRef = useRef(unackAlerts);
   const inventoryRef = useRef(inventory);
   const isAutoTamirRef = useRef(isAutoTamir);
+  const assets = useTrackStore(state => state.assets);
+  const assetsRef = useRef(assets);
 
   useEffect(() => {
     unackAlertsRef.current = unackAlerts;
     inventoryRef.current = inventory;
     isAutoTamirRef.current = isAutoTamir;
-  }, [unackAlerts, inventory, isAutoTamir]);
+    assetsRef.current = assets;
+  }, [unackAlerts, inventory, isAutoTamir, assets]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1541,6 +1692,9 @@ export default function App() {
         case '7':
           if (unackAlertsRef.current.length > 0) trigger('7', () => setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true }))));
           break;
+        case '8':
+          trigger('8', () => setIsAutoTamir(p => !p));
+          break;
       }
     };
 
@@ -1566,9 +1720,12 @@ export default function App() {
       {isGameOver && <AfterActionReport />}
       
       {isPaused && !isGameOver && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#00050A]/40 backdrop-blur-[2px] pointer-events-none">
-          <div className="bg-[#001A26]/90 border border-[#00E5FF] px-8 py-4 shadow-[0_0_30px_rgba(0,229,255,0.2)] animate-pulse">
-            <span className="text-2xl font-bold tracking-[0.5em] text-[#00E5FF]">SYSTEM PAUSED</span>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center justify-center pointer-events-none drop-shadow-[0_0_15px_rgba(0,0,0,1)]">
+          <div className="bg-[#FFCC00] text-[#00050A] px-6 py-2 border-2 border-[#FFCC00] font-bold tracking-[0.5em] animate-pulse">
+            TACTICAL PAUSE
+          </div>
+          <div className="bg-[#00050A]/90 text-[#FFCC00] px-4 py-1 text-[10px] tracking-widest border-b border-x border-[#FFCC00]/50 backdrop-blur-md">
+            SIMULATION SUSPENDED. COMBAT SYSTEMS ONLINE.
           </div>
         </div>
       )}
@@ -1613,7 +1770,6 @@ export default function App() {
                           trackId={trackId} 
                           isHooked={hookedTrackIds.includes(trackId)} 
                           cameraZoom={camera.zoom} 
-                          lastSweepTime={lastSweepTime}
                           filters={filters} 
                         />
                       );
@@ -1779,6 +1935,19 @@ export default function App() {
         >
           <span className={`text-[8px] mb-0.5 ${unackAlerts.length > 0 ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>7</span>
           ACK ALERTS
+        </button>
+
+        <button 
+          className={`h-10 px-2 lg:px-4 border text-[10px] lg:text-xs font-bold tracking-widest transition-all flex flex-col items-center justify-center whitespace-nowrap shrink-0 ${
+            isAutoTamir 
+              ? (buttonFeedback['8'] === 'action' ? 'bg-[#FF3366] border-[#FF0033] text-[#00050A] brightness-150 scale-[0.98]' : 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]')
+              : 'bg-[#001A26] border-[#004466] text-[#00E5FF] hover:bg-[#002B40]'
+          }`}
+          onClick={() => { triggerKeyFeedback('8', 'action'); setIsAutoTamir(p => !p); }}
+          title="Toggle Iron Dome (TAMIR) point defense automation"
+        >
+          <span className={`text-[8px] mb-0.5 ${isAutoTamir ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>8</span>
+          IRON DOME: {isAutoTamir ? 'AUTO' : 'HOLD'}
         </button>
       </footer>
 

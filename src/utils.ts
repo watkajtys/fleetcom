@@ -12,8 +12,14 @@ export const getThreatName = (category: TrackCategory) => {
   }
 };
 
-export const calculateRange = (x1: number, y1: number, x2: number, y2: number) => 
-  Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+export const FT_TO_NM = 1 / 6076.12;
+
+export const calculateRange = (x1: number, y1: number, x2: number, y2: number, alt1: number = 0, alt2: number = 0) => {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  const dz = (alt1 - alt2) * FT_TO_NM;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+};
 
 export const calculateBearing = (x1: number, y1: number, x2: number, y2: number) => 
   Math.round(Math.atan2(x2 - x1, -(y2 - y1)) * (180 / Math.PI) + 360) % 360;
@@ -28,31 +34,52 @@ export const calculateKinematics = (track: Track) => {
   const dy = track.y - BATTERY_POS.y;
 
   const v2 = vx * vx + vy * vy;
-  if (v2 === 0) return { cpa: calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1), tcpa: 0 };
+  if (v2 === 0) return { cpa: calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y, track.alt, 0).toFixed(1), tcpa: 0 };
 
   let tcpa = -(dx * vx + dy * vy) / v2;
   if (tcpa < 0) tcpa = 0;
 
   const cpaX = dx + tcpa * vx;
   const cpaY = dy + tcpa * vy;
-  const cpa = Math.sqrt(cpaX * cpaX + cpaY * cpaY);
+  // CPA also factors in altitude
+  const cpaZ = track.alt * FT_TO_NM;
+  const cpa = Math.sqrt(cpaX * cpaX + cpaY * cpaY + cpaZ * cpaZ);
 
   return { cpa: cpa.toFixed(1), tcpa: Math.round(tcpa) };
 };
 
-export const calculateClosureRate = (shooter: {x: number, y: number}, target: Track, missileSpdNmSec: number) => {
-  const bearingShooterToTarget = calculateBearing(shooter.x, shooter.y, target.x, target.y);
-  const bearingTargetToShooter = (bearingShooterToTarget + 180) % 360;
+export const calculateClosureRate = (shooter: {x: number, y: number, alt?: number}, target: Track, missileSpdNmSec: number) => {
+  const shooterAlt = shooter.alt || 0;
   
-  // Angle between target's heading and the line back to the shooter
-  let aspectAngle = Math.abs(target.hdg - bearingTargetToShooter);
-  if (aspectAngle > 180) aspectAngle = 360 - aspectAngle;
+  // 3D Distance
+  const dist = calculateRange(shooter.x, shooter.y, target.x, target.y, shooterAlt, target.alt);
+  if (dist < 0.1) return missileSpdNmSec; // Too close, avoid div by zero
+
+  // Relative Velocity Vector (Target)
+  const tSpdNmSec = target.spd / 3600;
+  const tRad = target.hdg * (Math.PI / 180);
+  const tvx = Math.sin(tRad) * tSpdNmSec;
+  const tvy = -Math.cos(tRad) * tSpdNmSec;
   
-  const radAspect = aspectAngle * (Math.PI / 180);
-  const targetRadialVel = (target.spd / 3600) * Math.cos(radAspect);
+  // Note: We don't have target's vertical speed (vclimb) in types yet, 
+  // but we can infer it for ballistic targets if needed. For now, assume level flight velocity for closure.
+  // Unless it's a TBM in terminal dive (we know that's ~4000ft/sec = ~0.65 NM/sec)
+  let tvz = 0;
+  if (target.category === 'TBM' && calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y) < 40) {
+    tvz = -4000 * FT_TO_NM; // 4000 ft/sec descent
+  } else if (target.category === 'ROCKET') {
+    tvz = -50 * FT_TO_NM; // Steady descent per App.tsx logic
+  }
+
+  // Unit vector from target to shooter
+  const ux = (shooter.x - target.x) / dist;
+  const uy = (shooter.y - target.y) / dist;
+  const uz = (shooterAlt - target.alt) * FT_TO_NM / dist;
+
+  // Project target velocity onto unit vector to get radial velocity component
+  const targetRadialVel = (tvx * ux + tvy * uy + tvz * uz);
   
-  // Vc = V_missile + V_target_radial
-  // (If target is moving away, targetRadialVel becomes negative)
+  // Vc = V_missile + V_target_radial_towards_missile
   return missileSpdNmSec + targetRadialVel;
 };
 

@@ -61,7 +61,8 @@ export const processFighters = (
   const hostiles = tracks.filter(t => 
     t.type === 'HOSTILE' && 
     t.category !== 'TBM' &&
-    (!t.interceptors || (!t.interceptors.some(i => i.shooterId === 'BATTERY') && t.interceptors.length < 2))
+    t.category !== 'ROCKET' &&
+    (!t.interceptors || t.interceptors.length === 0)
   );
   const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
   
@@ -83,7 +84,7 @@ export const processFighters = (
     // 2. Visual ID Logic (VID) - Fighter identifies unknowns at close range
     const nearbyUnknowns = unknownGrid.getNearby(track.x, track.y, 3.0);
     nearbyUnknowns.forEach(u => {
-      if (calculateRange(track.x, track.y, u.x, u.y) < 3.0) {
+      if (calculateRange(track.x, track.y, u.x, u.y, track.alt, u.alt) < 3.0) {
         const uInNext = trackMap.get(u.id); // O(1) lookup
         if (uInNext && !uInNext.iffInterrogated) {
           const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
@@ -114,13 +115,13 @@ export const processFighters = (
     for (const hostile of nearbyHostiles) {
       if (currentlyTargetedIds.has(hostile.id)) continue; // Deconfliction: Someone else is shooting it
 
-      const range = calculateRange(track.x, track.y, hostile.x, hostile.y);
+      const range = calculateRange(track.x, track.y, hostile.x, hostile.y, track.alt, hostile.alt);
       if (range > MAX_DETECT_RANGE) continue;
 
       // Conservation of Fires (Cost-Awareness)
       // Drones are cheap. Don't waste a $1.2M AMRAAM unless it's within 20NM of the Battery.
       let isHighValue = hostile.category !== 'UAS';
-      let isImmediateThreat = calculateRange(hostile.x, hostile.y, BATTERY_POS.x, BATTERY_POS.y) < 20;
+      let isImmediateThreat = calculateRange(hostile.x, hostile.y, BATTERY_POS.x, BATTERY_POS.y, hostile.alt, 0) < 20;
 
       if (!isHighValue && !isImmediateThreat) {
         // Skip this target. It's too cheap and too far away. Let the SHORAD deal with it later.
@@ -165,11 +166,11 @@ export const processFighters = (
         if (targetInNext) {
           targetInNext.interceptors = targetInNext.interceptors || [];
           targetInNext.interceptors.push({
-            id: `AAM-${Date.now()}-${Math.random()}`,
+            id: `AAM-${now}-${Math.random()}`,
             weapon: 'AMRAAM',
             shooterId: fighterId,
             launchPos: { x: track.x, y: track.y },
-            engagementTime: Date.now(),
+            engagementTime: now,
             interceptDuration: interceptTimeMs,
             interceptTtl: Math.ceil(interceptTimeSecs)
           });
@@ -182,14 +183,15 @@ export const processFighters = (
         };
       } else {
         // Intercept logic (Lead Pursuit)
-        if (!track.targetWaypoint || calculateRange(track.targetWaypoint.x, track.targetWaypoint.y, bestTarget.x, bestTarget.y) > 2) {
+        // Only log if we are newly assigning this target
+        if (track.targetId !== bestTarget.id) {
           events.push({ type: 'LOG', message: `${track.id}: Intercepting TRACK ${bestTarget.id}.`, logType: 'INFO' });
         }
         
         // Assume maximum intercept speed (1300 knots) for lead calculation
         const leadPoint = calculateLeadInterceptPoint({x: track.x, y: track.y, spd: 1300}, bestTarget);
         
-        return { ...track, targetWaypoint: leadPoint };
+        return { ...track, targetWaypoint: leadPoint, targetId: bestTarget.id };
       }
     }
     
