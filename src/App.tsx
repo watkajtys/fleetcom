@@ -288,6 +288,12 @@ const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
         <text x={1.2 / cameraZoom} y={0.5 / cameraZoom} fill="#00E5FF" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.7">
           {asset.name}
         </text>
+        {asset.hasCram && (
+          <>
+            <circle cx="0" cy="0" r="2.5" fill="none" stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} opacity="0.5" />
+            <text x="0" y="-2.8" fill="#00E5FF" fontSize={0.5 / cameraZoom} fontFamily="monospace" opacity="0.5" textAnchor="middle">C-RAM</text>
+          </>
+        )}
       </g>
     ))}
   </>
@@ -888,8 +894,10 @@ export default function App() {
                 // 4.6 Terminal Point Defense (C-RAM / Laser CIWS)
                 nextTracks = nextTracks.map(t => {
                   if (t.type === 'HOSTILE' && t.category !== 'TBM' && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'CIWS'))) {
-                    // Check if track is threatening ANY defended asset
+                    // Check if track is threatening ANY defended asset that has C-RAM equipped
                     for (const asset of DEFENDED_ASSETS) {
+                      if (!asset.hasCram) continue;
+                      
                       const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y);
                       if (rngToAsset <= 2.5) {
                         setInterceptorsFired(prev => ({ ...prev, 'C-RAM': prev['C-RAM'] + 1 }));
