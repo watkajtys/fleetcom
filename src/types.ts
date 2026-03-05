@@ -22,6 +22,7 @@ export interface Track {
   category: TrackCategory;
   history: {x: number, y: number}[];
   iffInterrogated: boolean;
+  isInterrogating?: boolean;
   tq: number; // Track Quality 1-9
   coasting: boolean; // True if radar temporarily lost lock
   interceptors: Interceptor[]; // Array of active missiles tracking this target
