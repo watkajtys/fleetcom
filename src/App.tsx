@@ -981,6 +981,14 @@ export default function App() {
             }
           } else {
             // Dynamic Profiles for Non-Fighter Tracks
+            const distToBattery = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+            
+            // Tactical Inbound Boost: 
+            // To keep gameplay fast, distant threats accelerate to Mach 2.5 until they are within 40NM.
+            if (distToBattery > 40 && track.type === 'HOSTILE') {
+              newSpd = 1500; 
+            }
+
             if (track.id === 'FLT-EK404') {
               // Hijack Profile: Aggressive descent to evade radar, throttle up
               if (newAlt > 5000) newAlt = Math.max(5000, newAlt - 500); // 10,000 ft/min emergency descent
