@@ -75,11 +75,9 @@ function useMouseCoords() {
   return useSyncExternalStore(nowStore.subscribeMouse, nowStore.getMouseSnapshot);
 }
 
-const getGstTimeStr = (offsetMs: number = 0) => {
+const getZuluTimeStr = (offsetMs: number = 0) => {
   const now = new Date(Date.now() + offsetMs);
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const gstDate = new Date(utc + (3600000 * 4));
-  return gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  return now.toISOString().substring(11, 19) + 'Z';
 };
 
 const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastSweepTime }: { interceptor: any, track: Track, color: string, cameraZoom: number, lastSweepTime: number }) => {
@@ -422,33 +420,19 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
 });
 
 const SystemClock = React.memo(() => {
-  const [times, setTimes] = useState(() => {
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const gstDate = new Date(utc + (3600000 * 4));
-    return {
-      gst: gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
-      zulu: now.toISOString().substring(11, 19) + 'Z'
-    };
-  });
+  const [time, setTime] = useState(() => new Date().toISOString().substring(11, 19) + 'Z');
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = new Date();
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const gstDate = new Date(utc + (3600000 * 4));
-      setTimes({
-        gst: gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
-        zulu: now.toISOString().substring(11, 19) + 'Z'
-      });
+      setTime(new Date().toISOString().substring(11, 19) + 'Z');
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
   return (
     <div className="flex flex-col items-end leading-none">
-      <span className="text-[#00E5FF] tabular-nums text-xs lg:text-sm font-bold">{times.gst}</span>
-      <span className="text-[#00E5FF] tabular-nums text-[9px] opacity-40">ZULU: {times.zulu}</span>
+      <span className="text-[#00E5FF] tabular-nums text-xs lg:text-sm font-bold">{time}</span>
+      <span className="text-[#00E5FF] tabular-nums text-[9px] opacity-40 tracking-widest">ZULU</span>
     </div>
   );
 });
@@ -774,10 +758,10 @@ export default function App() {
 
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
-    { id: 'initial-1', time: getGstTimeStr(-120000), message: 'SYS: JIAMD NODE INITIALIZED', type: 'INFO', acknowledged: true },
-    { id: 'initial-2', time: getGstTimeStr(-90000), message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
-    { id: 'initial-3', time: getGstTimeStr(-60000), message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
-    { id: 'initial-4', time: getGstTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
+    { id: 'initial-1', time: getZuluTimeStr(-120000), message: 'SYS: JIAMD NODE INITIALIZED', type: 'INFO', acknowledged: true },
+    { id: 'initial-2', time: getZuluTimeStr(-90000), message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
+    { id: 'initial-3', time: getZuluTimeStr(-60000), message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
+    { id: 'initial-4', time: getZuluTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
   const [isAutoTamir, setIsAutoTamir] = useState(false);
@@ -836,7 +820,7 @@ export default function App() {
   }, [splashes.length]);
 
   const addLog = useCallback((message: string, type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION' = 'INFO') => {
-    const timeStr = getGstTimeStr();
+    const timeStr = getZuluTimeStr();
     const logId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     setLogs(prev => [{ id: logId, time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
   }, []);

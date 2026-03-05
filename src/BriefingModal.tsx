@@ -18,6 +18,9 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
   const gstTimeStr = gstDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const gstDateStr = gstDate.toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
 
+  // Zulu Time
+  const zuluTimeStr = localTime.toISOString().substring(11, 19) + 'Z';
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#00050A]/90 backdrop-blur-sm p-4 text-[#00E5FF] font-mono">
       
@@ -32,16 +35,21 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
         {/* Content */}
         <div className="p-6 space-y-6">
           
-          <div className="grid grid-cols-2 gap-4 border-b border-[#004466]/50 pb-4 text-xs">
+          <div className="grid grid-cols-3 gap-4 border-b border-[#004466]/50 pb-4 text-xs">
             <div>
-              <div className="text-[#004466] mb-1">LOCAL TERMINAL ({Intl.DateTimeFormat().resolvedOptions().timeZone})</div>
-              <div className="text-lg">{userTimeStr}</div>
-              <div className="opacity-70">{userDateStr}</div>
+              <div className="text-[#004466] mb-1">LOCAL TERMINAL</div>
+              <div className="text-base lg:text-lg">{userTimeStr}</div>
+              <div className="opacity-70 text-[10px]">{userDateStr}</div>
             </div>
             <div>
-              <div className="text-[#004466] mb-1">SECTOR CLOCK (GST / UTC+4)</div>
-              <div className="text-lg text-[#FFCC00]">{gstTimeStr}</div>
-              <div className="opacity-70 text-[#FFCC00]/70">{gstDateStr}</div>
+              <div className="text-[#004466] mb-1 text-center">SECTOR (GST)</div>
+              <div className="text-base lg:text-lg text-[#FFCC00] text-center">{gstTimeStr}</div>
+              <div className="opacity-70 text-[#FFCC00]/70 text-[10px] text-center">{gstDateStr}</div>
+            </div>
+            <div>
+              <div className="text-[#004466] mb-1 text-right">ZULU (UTC)</div>
+              <div className="text-base lg:text-lg text-right">{zuluTimeStr}</div>
+              <div className="opacity-70 text-[10px] text-right">GLOBAL REF</div>
             </div>
           </div>
 
