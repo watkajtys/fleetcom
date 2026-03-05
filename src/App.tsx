@@ -97,20 +97,26 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, lastS
 import { useTrackStore } from './store';
 
 const trackSymbolAreEqual = (
-  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number },
-  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number }
+  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number, filters: any },
+  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number, filters: any }
 ) => {
   if (prevProps.trackId !== nextProps.trackId) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
   if (prevProps.lastSweepTime !== nextProps.lastSweepTime) return false;
+  if (prevProps.filters !== nextProps.filters) return false;
   return true;
 };
 
-const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime }: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number }) => {
+const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, lastSweepTime, filters }: { trackId: string, isHooked: boolean, cameraZoom: number, lastSweepTime: number, filters: any }) => {
   const track = useTrackStore(state => state.tracks[trackId]);
   const now = useNow();
   if (!track || track.detected === false) return null;
+
+  if (!filters.showUnknowns && (track.type === 'UNKNOWN' || track.type === 'PENDING')) return null;
+  if (!filters.showFriends && track.type === 'FRIEND') return null;
+  if (!filters.showNeutrals && (track.type === 'NEUTRAL' || track.type === 'ASSUMED_FRIEND')) return null;
+  if (!filters.showHostiles && (track.type === 'HOSTILE' || track.type === 'SUSPECT')) return null;
 
   const elapsed = (now - lastSweepTime) / 1000;
   const smoothX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
@@ -287,9 +293,16 @@ const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => (
   </>
 ));
 
-const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds }: { hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>> }) => {
+const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filters }: { hookedTrackIds: string[], setHookedTrackIds: React.Dispatch<React.SetStateAction<string[]>>, filters: any }) => {
   const tracksMap = useTrackStore(state => state.tracks);
-  const tracks = useMemo(() => Object.values(tracksMap), [tracksMap]);
+  const tracks = useMemo(() => Object.values(tracksMap).filter(t => {
+    if (t.detected === false) return false;
+    if (!filters.showUnknowns && (t.type === 'UNKNOWN' || t.type === 'PENDING')) return false;
+    if (!filters.showFriends && t.type === 'FRIEND') return false;
+    if (!filters.showNeutrals && (t.type === 'NEUTRAL' || t.type === 'ASSUMED_FRIEND')) return false;
+    if (!filters.showHostiles && (t.type === 'HOSTILE' || t.type === 'SUSPECT')) return false;
+    return true;
+  }), [tracksMap, filters]);
 
   return (
     <aside className="flex-1 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
@@ -309,7 +322,7 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds }: { h
             </tr>
           </thead>
           <tbody className="divide-y divide-[#001A26]">
-            {tracks.filter(t => t.detected !== false).map(t => {
+            {tracks.map(t => {
               const range = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y).toFixed(1);
               const isHooked = hookedTrackIds.includes(t.id);
               let typeColor = 'text-[#FFFF00]';
@@ -381,7 +394,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoShorad, setIsAutoShorad, salvoMode, setSalvoMode }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoShorad: boolean, setIsAutoShorad: React.Dispatch<React.SetStateAction<boolean>>, salvoMode: boolean, setSalvoMode: React.Dispatch<React.SetStateAction<boolean>> }) => {
+const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoShorad, setIsAutoShorad, salvoMode, setSalvoMode, filters, setFilters }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoShorad: boolean, setIsAutoShorad: React.Dispatch<React.SetStateAction<boolean>>, salvoMode: boolean, setSalvoMode: React.Dispatch<React.SetStateAction<boolean>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
   const tracksMap = useTrackStore(state => state.tracks);
   const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
 
@@ -536,21 +549,56 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
       </div>
 
       {/* Battery Doctrine Controls (Always Visible) */}
-      <div className="border-t border-[#002B40] bg-[#001A26]/50 p-3 mt-auto flex flex-col gap-2">
-        <div className="text-[10px] text-[#004466] uppercase tracking-tighter">Battery Doctrine</div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setIsAutoShorad(p => !p)} 
-            className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-          >
-            SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
-          </button>
-          <button 
-            onClick={() => setSalvoMode(p => !p)} 
-            className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
-          >
-            FIRE: {salvoMode ? 'SALVO (2)' : 'SINGLE'}
-          </button>
+      <div className="border-t border-[#002B40] bg-[#001A26]/50 p-3 mt-auto flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
+          <div className="text-[10px] text-[#004466] uppercase tracking-tighter">Battery Doctrine</div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsAutoShorad(p => !p)} 
+              className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${isAutoShorad ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+            >
+              SHORAD: {isAutoShorad ? 'FREE' : 'HOLD'}
+            </button>
+            <button 
+              onClick={() => setSalvoMode(p => !p)} 
+              className={`flex-1 py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${salvoMode ? 'bg-[#FF00FF] text-[#00050A] border-[#FF00FF]' : 'text-[#FFCC00] border-[#002B40] hover:bg-[#002B40]'}`}
+            >
+              FIRE: {salvoMode ? 'SALVO (2)' : 'SINGLE'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 pt-2 border-t border-[#002B40]/50">
+          <div className="text-[10px] text-[#004466] uppercase tracking-tighter flex justify-between">
+            <span>Map Filters</span>
+            <span className="text-[#00E5FF] opacity-50">DISPLAY</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button 
+              onClick={() => setFilters((f: any) => ({ ...f, showHostiles: !f.showHostiles }))} 
+              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showHostiles ? 'text-[#FF0000] border-[#FF0000] bg-[#FF0000]/10' : 'text-[#FF0000]/30 border-[#002B40] bg-transparent'}`}
+            >
+              HOSTILE
+            </button>
+            <button 
+              onClick={() => setFilters((f: any) => ({ ...f, showUnknowns: !f.showUnknowns }))} 
+              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showUnknowns ? 'text-[#FFFF00] border-[#FFFF00] bg-[#FFFF00]/10' : 'text-[#FFFF00]/30 border-[#002B40] bg-transparent'}`}
+            >
+              PENDING
+            </button>
+            <button 
+              onClick={() => setFilters((f: any) => ({ ...f, showFriends: !f.showFriends }))} 
+              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showFriends ? 'text-[#00FF33] border-[#00FF33] bg-[#00FF33]/10' : 'text-[#00FF33]/30 border-[#002B40] bg-transparent'}`}
+            >
+              FRIEND
+            </button>
+            <button 
+              onClick={() => setFilters((f: any) => ({ ...f, showNeutrals: !f.showNeutrals }))} 
+              className={`py-1.5 text-[10px] font-bold tracking-widest transition-colors border ${filters.showNeutrals ? 'text-[#00FFFF] border-[#00FFFF] bg-[#00FFFF]/10' : 'text-[#00FFFF]/30 border-[#002B40] bg-transparent'}`}
+            >
+              NEUTRAL
+            </button>
+          </div>
         </div>
       </div>
     </aside>
@@ -625,6 +673,7 @@ export default function App() {
   const [enemyCost, setEnemyCost] = useState(0);
   const [isAutoShorad, setIsAutoShorad] = useState(false);
   const [salvoMode, setSalvoMode] = useState(false);
+  const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const simTimeRef = useRef(0);
 
   // Camera State
@@ -1284,7 +1333,8 @@ export default function App() {
                           trackId={trackId} 
                           isHooked={hookedTrackIds.includes(trackId)} 
                           cameraZoom={camera.zoom} 
-                          lastSweepTime={lastSweepTime} 
+                          lastSweepTime={lastSweepTime}
+                          filters={filters} 
                         />
                       );
                     })}
@@ -1342,14 +1392,14 @@ export default function App() {
         <div className="flex flex-col gap-4 w-[280px] pointer-events-auto h-full">
           
           {/* Track Summary Table */}
-          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} />
+          <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} />
 
           {/* System Event Log */}
           <SystemEventLog logs={logs} />
         </div>
 
         {/* RIGHT PANEL: Tote (Hooked Track Data) */}
-        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoShorad={isAutoShorad} setIsAutoShorad={setIsAutoShorad} salvoMode={salvoMode} setSalvoMode={setSalvoMode} />
+        <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoShorad={isAutoShorad} setIsAutoShorad={setIsAutoShorad} salvoMode={salvoMode} setSalvoMode={setSalvoMode} filters={filters} setFilters={setFilters} />
       </main>
 
       {/* --- BOTTOM SOFT KEY BAR --- */}
