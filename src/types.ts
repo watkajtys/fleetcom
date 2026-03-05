@@ -32,6 +32,8 @@ export interface Track {
   isFighter?: boolean;
   isRTB?: boolean;
   missilesRemaining?: number;
+  fuel?: number; // Pounds of fuel
+  maxFuel?: number;
   targetWaypoint?: {x: number, y: number} | null;
   patrolWaypoint?: {x: number, y: number} | null;
 }

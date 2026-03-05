@@ -103,8 +103,8 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR FALCON 21, 22. SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404.',
     type: 'ACTION',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'FALCON-21', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 40, y: 40} },
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'FALCON-22', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 45, y: 40} }
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'FALCON-21', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 40, y: 40} },
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'FALCON-22', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 45, y: 40} }
     ]
   },
   {
@@ -148,8 +148,8 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'HUNTRESS: SCRAMBLE FALCON 23, 24 TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE. ENGAGE TARGETS OF OPPORTUNITY.',
     type: 'ACTION',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 50, y: 40} },
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, targetWaypoint: {x: 55, y: 40} }
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 50, y: 40} },
+      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 55, y: 40} }
     ]
   }
 ];

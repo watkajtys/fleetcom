@@ -429,10 +429,18 @@ const Tote = React.memo(({ hookedTracks, masterWarning, vectoringTrackId, setVec
             {/* Fighter Specific Data */}
             {hookedTrack.isFighter && (
               <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
-                <div className="flex justify-between items-center mb-2">
+                <div className="flex justify-between items-center mb-1">
                   <span className="text-xs text-[#004466]">AAM INVENTORY</span>
                   <span className="text-xs font-bold text-[#00E5FF]">{hookedTrack.missilesRemaining} / 4</span>
                 </div>
+                {hookedTrack.fuel !== undefined && hookedTrack.maxFuel !== undefined && (
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-[#004466]">FUEL (LBS)</span>
+                    <span className={`text-xs font-bold ${hookedTrack.fuel < (hookedTrack.maxFuel * 0.25) ? 'text-[#FFCC00] animate-pulse' : 'text-[#00FF33]'}`}>
+                      {Math.floor(hookedTrack.fuel)}
+                    </span>
+                  </div>
+                )}
                 <button
                   className={`w-full py-2 text-xs font-bold tracking-widest transition-colors border ${
                     vectoringTrackId === hookedTrack.id
@@ -614,6 +622,8 @@ export default function App() {
           let newHdg = track.hdg;
           let newTargetWaypoint = track.targetWaypoint;
 
+          let newFuel = track.fuel;
+
           if (track.isFighter) {
             // Dynamic Throttle
             let targetSpd = 500; // F-16E Desert Falcon Cruise
@@ -626,6 +636,13 @@ export default function App() {
 
             // Scramble climb
             if (track.alt < 50000) newAlt = Math.min(50000, track.alt + 1500);
+
+            // Fuel Consumption (3s tick)
+            // Approx burn: 40 lbs/tick at cruise (500kts), 150 lbs/tick at full afterburner (1300kts)
+            if (newFuel !== undefined) {
+              const burnRate = newSpd > 600 ? 150 : 40;
+              newFuel = Math.max(0, newFuel - burnRate);
+            }
 
             // Maneuvering
             if (newTargetWaypoint) {
@@ -666,7 +683,7 @@ export default function App() {
           const isDetected = track.sensor === 'L16' || rangeToBattery <= radarHorizonNm;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
-          return { ...track, x: newX, y: newY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint };
+          return { ...track, x: newX, y: newY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint, fuel: newFuel };
         });
 
         // 3. Fighter AI (VID, Targeting, and Auto-Engagement)
@@ -674,9 +691,15 @@ export default function App() {
 
         // 4. Cleanup and RTB
         nextTracks = nextTracks.map(track => {
-          if (track.isFighter && track.missilesRemaining === 0 && !track.isRTB) {
-            events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
-            return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
+          if (track.isFighter && !track.isRTB) {
+            if (track.missilesRemaining === 0) {
+              events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
+              return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
+            }
+            if (track.fuel !== undefined && track.maxFuel !== undefined && track.fuel < (track.maxFuel * 0.25)) {
+              events.push({ type: 'LOG', message: `${track.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
+              return { ...track, isRTB: true, targetWaypoint: { x: 65, y: 65 } };
+            }
           }
           return track;
         });
