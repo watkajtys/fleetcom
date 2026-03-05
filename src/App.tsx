@@ -170,25 +170,25 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
     <rect x="-500" y="-500" width="1000" height="1000" fill="url(#grid)" />
 
     {/* Dubai Coastline & Landmarks (Abstract/Angular Military Style) */}
-    {/* Main Coastline */}
+    {/* Main Coastline - Perfectly aligned through Jebel Ali (40, 60) and Port Rashid (58, 43) */}
     <path 
-      d="M -100,165 L 0,90 L 35,62 L 65,38 L 150,-32" 
+      d="M -100,192 L 0,98 L 40,60 L 58,43 L 150,-44" 
       fill="none" 
       stroke="#FFFFFF" 
       strokeOpacity="0.4"
       strokeWidth={0.4 / cameraZoom} 
     />
     
-    {/* Palm Jebel Ali (Abstract Square) */}
-    <path d="M 37,58 L 39,56 L 41,58 L 39,60 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
-    {/* Palm Jumeirah (Abstract Square) */}
-    <path d="M 46,51 L 48,49 L 50,51 L 48,53 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
-    {/* The World Islands (Abstract Polygon) */}
-    <path d="M 52,45 L 55,43 L 57,46 L 54,47 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    {/* Palm Jebel Ali (Abstract Square) - Offshore from Jebel Ali */}
+    <path d="M 36,57 L 38,55 L 40,57 L 38,59 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    {/* Palm Jumeirah (Abstract Square) - Halfway between ports */}
+    <path d="M 44,49 L 46,47 L 48,49 L 46,51 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
+    {/* The World Islands (Abstract Polygon) - Offshore from Port Rashid */}
+    <path d="M 49,42 L 52,40 L 54,43 L 51,44 Z" fill="none" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth={0.2 / cameraZoom} />
 
-    {/* Defended Urban Footprint (Dubai Metropolitan Area) */}
-    <path d="M 40,60 L 60,42 L 65,48 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
-    <text x="47" y="55" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4" transform="rotate(-40 47 55)">DEFENDED METRO AREA</text>
+    {/* Defended Urban Footprint (Dubai Metropolitan Area) - Aligned to coast */}
+    <path d="M 40,60 L 58,43 L 63,49 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
+    <text x="47" y="55" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4" transform="rotate(-43 47 55)">DEFENDED METRO AREA</text>
     {/* Radar Sector (FOV Wedge) - 120 degrees looking North */}
     <g transform={`translate(${BATTERY_POS.x}, ${BATTERY_POS.y})`}>
       <path d="M 0 0 L -43.3 -75 A 86.6 86.6 0 0 1 43.3 -75 Z" fill="#00FFFF" fillOpacity="0.02" stroke="#00FFFF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${1 / cameraZoom} ${2 / cameraZoom}`} />
