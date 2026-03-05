@@ -11,6 +11,42 @@ export interface AIEvent {
   amount?: number;
 }
 
+class SpatialGrid {
+  private cellSize: number;
+  private cells: Map<string, Track[]>;
+
+  constructor(cellSize: number) {
+    this.cellSize = cellSize;
+    this.cells = new Map();
+  }
+
+  insert(track: Track) {
+    const cx = Math.floor(track.x / this.cellSize);
+    const cy = Math.floor(track.y / this.cellSize);
+    const key = `${cx},${cy}`;
+    if (!this.cells.has(key)) {
+      this.cells.set(key, []);
+    }
+    this.cells.get(key)!.push(track);
+  }
+
+  getNearby(x: number, y: number, radius: number): Track[] {
+    const minX = Math.floor((x - radius) / this.cellSize);
+    const maxX = Math.floor((x + radius) / this.cellSize);
+    const minY = Math.floor((y - radius) / this.cellSize);
+    const maxY = Math.floor((y + radius) / this.cellSize);
+
+    const result: Track[] = [];
+    for (let cx = minX; cx <= maxX; cx++) {
+      for (let cy = minY; cy <= maxY; cy++) {
+        const cell = this.cells.get(`${cx},${cy}`);
+        if (cell) result.push(...cell);
+      }
+    }
+    return result;
+  }
+}
+
 // The core fighter state processing
 export const processFighters = (
   tracks: Track[], 
@@ -22,14 +58,20 @@ export const processFighters = (
   const trackMap = new Map(tracks.map(t => [t.id, t]));
 
   // 1. Pre-process the battlespace for the fighters
-  // Fighters will ignore any target that already has an inbound interceptor from the BATTERY,
-  // or any target that already has 2 or more interceptors from other fighters.
   const hostiles = tracks.filter(t => 
     t.type === 'HOSTILE' && 
     (!t.interceptors || (!t.interceptors.some(i => i.shooterId === 'BATTERY') && t.interceptors.length < 2))
   );
   const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
   
+  // Spatial Indexing for fast neighbor lookups
+  const MAX_DETECT_RANGE = 50;
+  const unknownGrid = new SpatialGrid(10); // 10 NM cells for fast 3 NM VID checks
+  unknowns.forEach(u => unknownGrid.insert(u));
+
+  const hostileGrid = new SpatialGrid(MAX_DETECT_RANGE); // 50 NM cells for engagement range checks
+  hostiles.forEach(h => hostileGrid.insert(h));
+
   // We use this to prevent two fighters from launching at the same target in the same sweep
   const currentlyTargetedIds = new Set<string>();
 
@@ -38,7 +80,8 @@ export const processFighters = (
     if (!track.isFighter || track.isRTB) return track;
 
     // 2. Visual ID Logic (VID) - Fighter identifies unknowns at close range
-    unknowns.forEach(u => {
+    const nearbyUnknowns = unknownGrid.getNearby(track.x, track.y, 3.0);
+    nearbyUnknowns.forEach(u => {
       if (calculateRange(track.x, track.y, u.x, u.y) < 3.0) {
         const uInNext = trackMap.get(u.id); // O(1) lookup
         if (uInNext && !uInNext.iffInterrogated) {
@@ -60,14 +103,14 @@ export const processFighters = (
     // 4. Engagement Logic
     if ((track.missilesRemaining || 0) <= 0) return track;
 
-    const MAX_DETECT_RANGE = 50;
     const WEAPON_RANGE = 18;
 
     let bestTarget: Track | null = null;
     let minRange = MAX_DETECT_RANGE;
     let highestValue = -1;
 
-    for (const hostile of hostiles) {
+    const nearbyHostiles = hostileGrid.getNearby(track.x, track.y, MAX_DETECT_RANGE);
+    for (const hostile of nearbyHostiles) {
       if (currentlyTargetedIds.has(hostile.id)) continue; // Deconfliction: Someone else is shooting it
 
       const range = calculateRange(track.x, track.y, hostile.x, hostile.y);
