@@ -15,7 +15,9 @@ export const DEFENDED_ASSETS = [
   { id: 'DAL-1', name: 'Al Maktoum Int Airport (DWC)', x: 45, y: 67.5, type: 'AIRBASE' },
   { id: 'DAL-2', name: 'Jebel Ali Port', x: 40, y: 60, type: 'PORT' },
   { id: 'DAL-3', name: 'Burj Khalifa / Downtown', x: 55, y: 50, type: 'INFRA' },
-  { id: 'DAL-4', name: 'Al Minhad Air Base', x: 57.5, y: 62.5, type: 'AIRBASE' }
+  { id: 'DAL-4', name: 'Al Minhad Air Base', x: 57.5, y: 62.5, type: 'AIRBASE' },
+  { id: 'DAL-5', name: 'Dubai Int Airport (DXB)', x: 60, y: 46, type: 'AIRBASE' },
+  { id: 'DAL-6', name: 'Port Rashid', x: 58, y: 43, type: 'PORT' }
 ];
 
 // Scenario: Worst-Case Complex Coordinated Attack on Dubai

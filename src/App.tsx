@@ -168,11 +168,27 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
       <path d="M 5 0 L 0 0 0 5" fill="none" stroke="#001A26" strokeWidth={0.05 / cameraZoom}/>
     </pattern>
     <rect width="100" height="100" fill="url(#grid)" />
-    
-    {/* Defended Area Polygon */}
-    <path d="M 45,70 L 38,62 L 53,48 L 58,52 L 48,72 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
-    <text x="42" y="65" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4">DEFENDED ASSET</text>
 
+    {/* Dubai Coastline & Landmarks */}
+    {/* Main Coastline from Abu Dhabi to Northern Emirates */}
+    <path 
+      d="M 0,90 L 20,75 L 35,62 L 40,60 L 44,55 L 48,51 L 52,49 L 60,42 L 65,38 L 80,25 L 100,5" 
+      fill="none" 
+      stroke="#FFFFFF" 
+      strokeOpacity="0.15"
+      strokeWidth={0.3 / cameraZoom} 
+    />
+    
+    {/* Palm Jebel Ali */}
+    <path d="M 37,59 A 2 2 0 1 1 39 57 A 2 2 0 1 1 37 59" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth={0.15 / cameraZoom} />
+    {/* Palm Jumeirah */}
+    <path d="M 47,52 A 2 2 0 1 1 49 50 A 2 2 0 1 1 47 52" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth={0.15 / cameraZoom} />
+    {/* The World Islands */}
+    <ellipse cx="54" cy="46" rx="2.5" ry="1.5" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} />
+
+    {/* Defended Urban Footprint (Dubai Metropolitan Area) */}
+    <path d="M 40,60 L 60,42 L 65,48 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
+    <text x="47" y="55" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4" transform="rotate(-40 47 55)">DEFENDED METRO AREA</text>
     {/* Radar Sector (FOV Wedge) - 120 degrees looking North */}
     <g transform={`translate(${BATTERY_POS.x}, ${BATTERY_POS.y})`}>
       <path d="M 0 0 L -43.3 -75 A 86.6 86.6 0 0 1 43.3 -75 Z" fill="#00FFFF" fillOpacity="0.02" stroke="#00FFFF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${1 / cameraZoom} ${2 / cameraZoom}`} />
