@@ -95,7 +95,7 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'ATC: FLIGHT EK404 SQUAWKING 7500. DEVIATING FROM ASSIGNED FLIGHT PATH. INTENTIONS UNKNOWN.',
     type: 'WARN',
     generateTracks: () => [
-      { ...createCrossingTrack('UNKNOWN', 'FW', 10, 10, 120, 500, 31000), id: 'FLT-EK404' }
+      { ...createCrossingTrack('UNKNOWN', 'FW', 20, 25, 120, 500, 31000), id: 'FLT-EK404' }
     ]
   },
   {
@@ -103,8 +103,8 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR FALCON 21, 22. SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404.',
     type: 'ACTION',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 290, 250, 1000), id: 'FALCON-21', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 40, y: 40} },
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 300, 250, 1000), id: 'FALCON-22', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 45, y: 40} }
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 290, 250, 1000), id: 'FALCON-21', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 35, y: 35} },
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 300, 250, 1000), id: 'FALCON-22', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 40, y: 35} }
     ]
   },
   {
@@ -151,8 +151,8 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'HUNTRESS: SCRAMBLE FALCON 23, 24 TO INTERCEPT LOW-ALTITUDE SWARM. WEAPONS FREE.',
     type: 'ACTION',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 310, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 50, y: 40} },
-      { ...createCrossingTrack('FRIEND', 'FW', 65, 65, 320, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 55, y: 40} }
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 310, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 45, y: 35} },
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 320, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 12000, maxFuel: 12000, targetWaypoint: {x: 50, y: 35} }
     ]
   },
   {
