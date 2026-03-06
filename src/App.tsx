@@ -1242,7 +1242,7 @@ export default function App() {
               } else if (i.isPkHit === false) {
                 // Visual Miss reporting
                 setTimeout(() => {
-                  addLog(`${i.shooterId} MISSED TRACK ${t.id} (INTERCEPTOR SELF-DESTRUCT).`, 'WARN');
+                  addLog(`${i.shooterId} MISSED TRACK ${t.id} (INTERCEPTOR SELF-DESTRUCT).`, 'INFO');
                 }, 0);
               }
               anyInterceptorsRemoved = true;
@@ -1545,7 +1545,7 @@ export default function App() {
               updatedTrack.targetWaypoint = { x: 57.5, y: 62.5 };
               changed = true;
             } else if (updatedTrack.fuel !== undefined && updatedTrack.maxFuel !== undefined && updatedTrack.fuel < (updatedTrack.maxFuel * 0.25)) {
-              events.push({ type: 'LOG', message: `${updatedTrack.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
+              events.push({ type: 'LOG', message: `${updatedTrack.id}: Bingo fuel. RTB Al Minhad.`, logType: 'INFO' });
               updatedTrack.isRTB = true;
               updatedTrack.targetWaypoint = { x: 57.5, y: 62.5 };
               changed = true;
