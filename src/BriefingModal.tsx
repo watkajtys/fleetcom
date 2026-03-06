@@ -131,9 +131,10 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
 
         {/* Footer */}
         <div className="p-4 bg-[#00111A] border-t border-[#004466] flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
-          <div className="flex flex-col text-[10px] text-[#00E5FF]/50 tracking-widest font-mono text-center sm:text-left">
-            <span>SYS.ARCHITECT // <a href="https://builtbyvibes.com" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">VIBES</a></span>
-            <span>OP.COMM // <a href="https://twitter.com/arethevibesoff" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">@ARETHEVIBESOFF</a></span>
+          <div className="text-[10px] text-[#00E5FF]/50 tracking-widest font-mono text-center sm:text-left">
+            <a href="https://builtbyvibes.com" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">BUILTBYVIBES</a>
+            {' // '}
+            <a href="https://twitter.com/arethevibesoff" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">@ARETHEVIBESOFF</a>
           </div>
           <button 
             onClick={onStart}
