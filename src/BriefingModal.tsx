@@ -29,7 +29,6 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
         {/* Header */}
         <div className="bg-[#002B40] px-4 py-2 border-b border-[#004466] flex justify-between items-center shrink-0">
           <span className="font-bold tracking-widest text-xs">JOINT INTEGRATED AIR & MISSILE DEFENSE (JIAMD)</span>
-          <span className="text-[#00FFFF] text-[10px] animate-pulse">CLASSIFIED // NOFORN</span>
         </div>
 
         {/* Content */}
