@@ -1171,7 +1171,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, endX: number, endY: number } | null>(null);
+  const [selectionPolygon, setSelectionPolygon] = useState<{ x: number, y: number }[]>([]);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [followedTrackId, setFollowedTrackId] = useState<string | null>(null);
   const [vectoringTrackId, setVectoringTrackId] = useState<string | null>(null);
@@ -1785,7 +1785,7 @@ export default function App() {
     if (activePointers.current.size === 1) {
       if (e.shiftKey || isSelectMode) {
         setIsSelecting(true);
-        setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
+        setSelectionPolygon([{ x: coords.x, y: coords.y }]);
       } else {
         setIsDragging(true);
         setDragStart({ x: e.clientX, y: e.clientY });
@@ -1794,7 +1794,7 @@ export default function App() {
     } else if (activePointers.current.size === 2) {
       setIsDragging(false);
       setIsSelecting(false);
-      setSelectionBox(null);
+      setSelectionPolygon([]);
       
       const pointers = Array.from(activePointers.current.values());
       const dist = Math.hypot(pointers[0].clientX - pointers[1].clientX, pointers[0].clientY - pointers[1].clientY);
@@ -1818,9 +1818,18 @@ export default function App() {
       return;
     }
 
-    if (isSelecting && selectionBox && activePointers.current.size === 1) {
+    if (isSelecting && activePointers.current.size === 1) {
       const coords = getMapCoords(e, e.currentTarget);
-      setSelectionBox(prev => prev ? { ...prev, endX: coords.x, endY: coords.y } : null);
+      // Only add point if it's far enough away from the last one to prevent enormous arrays
+      setSelectionPolygon(prev => {
+        const last = prev[prev.length - 1];
+        if (!last) return [{x: coords.x, y: coords.y}];
+        const dist = Math.hypot(last.x - coords.x, last.y - coords.y);
+        if (dist > 0.5) { // Minimum map distance delta before adding a new vertex
+           return [...prev, {x: coords.x, y: coords.y}];
+        }
+        return prev;
+      });
       return;
     }
 
@@ -1878,26 +1887,36 @@ export default function App() {
       return;
     }
 
-    if (isSelecting && selectionBox) {
-      const x1 = Math.min(selectionBox.startX, selectionBox.endX);
-      const x2 = Math.max(selectionBox.startX, selectionBox.endX);
-      const y1 = Math.min(selectionBox.startY, selectionBox.endY);
-      const y2 = Math.max(selectionBox.startY, selectionBox.endY);
+    if (isSelecting && selectionPolygon.length > 0) {
       const lastSweepTime = useTrackStore.getState().lastSweepTime;
       const elapsed = (nowStore.now - lastSweepTime) / 1000;
 
-      const inBox = useTrackStore.getState().getAllTracks()
+      // Ray-casting algorithm to determine if a point is inside a polygon
+      const isPointInPolygon = (x: number, y: number, polygon: {x: number, y: number}[]) => {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x, yi = polygon[i].y;
+          const xj = polygon[j].x, yj = polygon[j].y;
+          
+          const intersect = ((yi > y) !== (yj > y))
+              && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      };
+
+      const inLasso = useTrackStore.getState().getAllTracks()
         .filter(t => t.detected !== false)
         .filter(t => {
           const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
           const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-          return smoothX >= x1 && smoothX <= x2 && smoothY >= y1 && smoothY <= y2;
+          return isPointInPolygon(smoothX, smoothY, selectionPolygon);
         })
         .map(t => t.id);
 
-      if (inBox.length > 0) {
-        setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inBox])) : inBox);
-        addLog(`GROUP HOOK: ${inBox.length} TRACKS SELECTED`, 'INFO');
+      if (inLasso.length > 0) {
+        setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
+        addLog(`GROUP HOOK: ${inLasso.length} TRACKS SELECTED`, 'INFO');
       } else if (!e.shiftKey && !isSelectMode) {
         setHookedTrackIds([]);
       }
@@ -1934,7 +1953,7 @@ export default function App() {
     if (activePointers.current.size === 0) {
       setIsDragging(false);
       setIsSelecting(false);
-      setSelectionBox(null);
+      setSelectionPolygon([]);
     }
   };
 
@@ -2316,13 +2335,10 @@ export default function App() {
                         />
                       );
                     })}
-          {/* Render Marquee Selection Box */}
-          {selectionBox && (
-            <rect
-              x={Math.min(selectionBox.startX, selectionBox.endX)}
-              y={Math.min(selectionBox.startY, selectionBox.endY)}
-              width={Math.abs(selectionBox.endX - selectionBox.startX)}
-              height={Math.abs(selectionBox.endY - selectionBox.startY)}
+          {/* Render Lasso Selection Polygon */}
+          {selectionPolygon.length > 1 && (
+            <polygon
+              points={selectionPolygon.map(p => `${p.x},${p.y}`).join(' ')}
               fill="#00FFFF"
               fillOpacity="0.1"
               stroke="#00FFFF"
