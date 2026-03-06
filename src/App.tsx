@@ -951,7 +951,7 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                       style={isActive ? { backgroundColor: item.color, borderColor: item.color } : {}}
                     >
                       <span className={`text-[8px] mb-0.5 opacity-70 uppercase`}>{item.label}</span>
-                      {isActive ? 'AUTO' : 'HOLD'}
+                      {isActive ? 'AUTO' : 'MANUAL'}
                     </button>
                   );
                 })}
@@ -1755,6 +1755,7 @@ export default function App() {
         // --- INTERACTION HELPERS ---
   const activePointers = useRef<Map<number, { clientX: number, clientY: number }>>(new Map());
   const lastPinchDistance = useRef<number | null>(null);
+  const hasDragged = useRef(false);
 
   const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent | { clientX: number, clientY: number }, container: HTMLDivElement | SVGSVGElement | Element) => {
     const svg = container instanceof SVGSVGElement ? container : container.querySelector('svg');
@@ -1768,10 +1769,9 @@ export default function App() {
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     activePointers.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+    hasDragged.current = false;
 
     const coords = getMapCoords(e, e.currentTarget);
-    const lastSweepTime = useTrackStore.getState().lastSweepTime;
-    const elapsed = (nowStore.now - lastSweepTime) / 1000;
 
     if (vectoringTrackId) {
       setTracks(current => current.map(t => 
@@ -1782,39 +1782,11 @@ export default function App() {
       return;
     }
 
-    const CLICK_RADIUS = Math.max(2.5, 4400 / (window.innerWidth * camera.zoom)); // Ensures minimum ~44px hit target size
-    const nearbyTracks = useTrackStore.getState().getAllTracks()
-      .filter(t => t.detected !== false)
-      .filter(t => {
-        const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-        const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-        return calculateRange(smoothX, smoothY, coords.x, coords.y) <= CLICK_RADIUS;
-      });
-
     if (activePointers.current.size === 1) {
       if (e.shiftKey || isSelectMode) {
-        if (nearbyTracks.length > 0) {
-          const targetId = nearbyTracks[0].id;
-          setHookedTrackIds(prev => prev.includes(targetId) ? prev.filter(id => id !== targetId) : [...prev, targetId]);
-        } else {
-          setIsSelecting(true);
-          setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
-        }
+        setIsSelecting(true);
+        setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
       } else {
-        if (nearbyTracks.length > 0) {
-          const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
-          const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
-          
-          if (currentIndex !== -1 && nearbyTracks.length > 1) {
-            const nextIndex = (currentIndex + 1) % nearbyTracks.length;
-            setHookedTrackIds([nearbyTracks[nextIndex].id]);
-          } else {
-            setHookedTrackIds([nearbyTracks[0].id]);
-          }
-        } else {
-          setHookedTrackIds([]);
-        }
-        
         setIsDragging(true);
         setDragStart({ x: e.clientX, y: e.clientY });
         setFollowedTrackId(null);
@@ -1860,6 +1832,11 @@ export default function App() {
       
       const dx = e.clientX - dragStart.x;
       const dy = e.clientY - dragStart.y;
+
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        hasDragged.current = true;
+      }
+      
       setCamera(prev => ({
         ...prev,
         x: prev.x - dx * scale,
@@ -1922,6 +1899,34 @@ export default function App() {
         setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inBox])) : inBox);
         addLog(`GROUP HOOK: ${inBox.length} TRACKS SELECTED`, 'INFO');
       } else if (!e.shiftKey && !isSelectMode) {
+        setHookedTrackIds([]);
+      }
+    } else if (!hasDragged.current && activePointers.current.size === 0) {
+      // Handle single tap selection
+      const coords = getMapCoords(e, e.currentTarget);
+      const lastSweepTime = useTrackStore.getState().lastSweepTime;
+      const elapsed = (nowStore.now - lastSweepTime) / 1000;
+      const CLICK_RADIUS = Math.max(2.5, 4400 / (window.innerWidth * camera.zoom));
+
+      const nearbyTracks = useTrackStore.getState().getAllTracks()
+        .filter(t => t.detected !== false)
+        .filter(t => {
+          const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+          const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+          return calculateRange(smoothX, smoothY, coords.x, coords.y) <= CLICK_RADIUS;
+        });
+
+      if (nearbyTracks.length > 0) {
+        const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
+        const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
+        
+        if (currentIndex !== -1 && nearbyTracks.length > 1) {
+          const nextIndex = (currentIndex + 1) % nearbyTracks.length;
+          setHookedTrackIds([nearbyTracks[nextIndex].id]);
+        } else {
+          setHookedTrackIds([nearbyTracks[0].id]);
+        }
+      } else {
         setHookedTrackIds([]);
       }
     }
