@@ -623,10 +623,15 @@ const SystemClock = React.memo(() => {
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
-  const isNarrativeLog = (msg: string) => msg.startsWith('HUNTRESS:') || msg.startsWith('ATC:') || msg.startsWith('INTEL:');
+  const isNarrativeLog = (log: SystemLog) => 
+    log.message.startsWith('HUNTRESS:') || 
+    log.message.startsWith('ATC:') || 
+    log.message.startsWith('INTEL:') || 
+    log.type === 'WARN' || 
+    log.type === 'ALERT';
   
-  const huntressLogs = logs.filter(l => isNarrativeLog(l.message));
-  const sysLogs = logs.filter(l => !isNarrativeLog(l.message));
+  const huntressLogs = logs.filter(l => isNarrativeLog(l));
+  const sysLogs = logs.filter(l => !isNarrativeLog(l));
 
   return (
     <div className="flex flex-col gap-2 shrink-0">
