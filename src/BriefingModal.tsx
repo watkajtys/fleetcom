@@ -22,7 +22,7 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
   const zuluTimeStr = localTime.toISOString().substring(11, 19) + 'Z';
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#00050A]/90 backdrop-blur-sm p-4 text-[#00E5FF] font-mono">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#00050A]/95 lg:bg-[#00050A]/90 lg:backdrop-blur-sm p-4 text-[#00E5FF] font-mono">
       
       <div className="max-w-2xl w-full max-h-[90vh] border border-[#004466] bg-[#001A26]/80 flex flex-col shadow-2xl shadow-[#00E5FF]/10">
         

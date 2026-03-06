@@ -532,7 +532,7 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
   }), [tracksMap, filters]);
 
   return (
-    <aside className="flex-1 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
+    <aside className="flex-1 bg-[#001A26]/20 lg:backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
       <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
           <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest hidden lg:block">SUMMARY</h2>
@@ -558,7 +558,7 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
       </div>
       <div className="flex-1 overflow-auto custom-scrollbar">
         <table className="w-full text-[10px] text-left table-fixed">
-          <thead className="text-[#004466] sticky top-0 bg-[#00050A]/50 border-b border-[#002B40] backdrop-blur-md">
+          <thead className="text-[#004466] sticky top-0 bg-[#00050A]/80 lg:bg-[#00050A]/50 border-b border-[#002B40] lg:backdrop-blur-md">
             <tr>
               <th className="py-2 px-3 font-normal w-1/4">TRK</th>
               <th className="py-2 px-2 font-normal w-1/4">TYPE</th>
@@ -636,7 +636,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   return (
     <div className="flex flex-col gap-2 shrink-0">
       {/* HUNTRESS SECURE NET */}
-      <aside className="h-36 bg-[#220000]/60 backdrop-blur-md border border-[#FF0033]/50 flex flex-col shrink-0 shadow-[0_0_15px_rgba(255,0,51,0.1)]">
+      <aside className="h-36 bg-[#220000]/80 lg:bg-[#220000]/60 lg:backdrop-blur-md border border-[#FF0033]/50 flex flex-col shrink-0 shadow-[0_0_15px_rgba(255,0,51,0.1)]">
         <div className="bg-[#220000] px-3 py-1.5 border-b border-[#FF0033]/50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <h2 className="text-xs font-bold text-[#FFCC00] tracking-widest">HUNTRESS</h2>
@@ -664,7 +664,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
       </aside>
 
       {/* SYSTEM EVENT LOG */}
-      <aside className="h-48 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col shrink-0">
+      <aside className="h-48 bg-[#001A26]/80 lg:bg-[#001A26]/20 lg:backdrop-blur-md border border-[#002B40] flex flex-col shrink-0">
         <div className="bg-[#001A26]/20 px-3 py-1 border-b border-[#002B40] flex items-center gap-2 shrink-0">
           <h2 className="text-[10px] font-bold text-[#00E5FF]/70 tracking-widest">ROUTINE LOGS</h2>
         </div>
@@ -753,7 +753,7 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
   const bullRng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y, hookedTrack.alt, 0).toFixed(0).padStart(3, '0') : '';
 
   return (
-    <aside className={`w-full bg-[#001A26]/40 backdrop-blur-xl border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-all duration-300 h-fit`}>
+    <aside className={`w-full bg-[#001A26]/80 lg:bg-[#001A26]/40 lg:backdrop-blur-xl border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-all duration-300 h-fit`}>
       <div className={`px-3 py-1.5 border-b ${masterWarning ? 'bg-[#440000]/40 border-[#FF0033]' : 'bg-[#001A26]/40 border-[#002B40]'} flex items-center justify-between shrink-0`}>
         <div className="flex items-center gap-2">
           <h2 className={`text-[10px] font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>TACTICAL DATA</h2>
@@ -1043,7 +1043,7 @@ const DraggableWindow = ({ defaultPos, title, children, className = '' }: { defa
 
   return (
     <div 
-      className={`absolute pointer-events-auto flex flex-col bg-[#00050A]/80 backdrop-blur-md border border-[#004466] shadow-[0_10px_30px_rgba(0,0,0,0.5)] ${className}`}
+      className={`absolute pointer-events-auto flex flex-col bg-[#00050A]/95 lg:bg-[#00050A]/80 lg:backdrop-blur-md border border-[#004466] shadow-[0_10px_30px_rgba(0,0,0,0.5)] ${className}`}
       style={{ left: pos.x, top: pos.y, zIndex: isDragging ? 50 : 40 }}
     >
       <div 
@@ -2231,7 +2231,7 @@ export default function App() {
           <div className="bg-[#FFCC00] text-[#00050A] px-6 py-2 border-2 border-[#FFCC00] font-bold tracking-[0.5em] animate-pulse">
             TACTICAL PAUSE
           </div>
-          <div className="bg-[#00050A]/90 text-[#FFCC00] px-4 py-1 text-[10px] tracking-widest border-b border-x border-[#FFCC00]/50 backdrop-blur-md">
+          <div className="bg-[#00050A]/95 lg:bg-[#00050A]/90 text-[#FFCC00] px-4 py-1 text-[10px] tracking-widest border-b border-x border-[#FFCC00]/50 lg:backdrop-blur-md">
             SIMULATION SUSPENDED. COMBAT SYSTEMS ONLINE.
           </div>
         </div>
@@ -2334,7 +2334,7 @@ export default function App() {
       </div>
 
             {/* --- TOP STATUS BAR --- */}
-                  <header className={`fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center gap-4 z-50 rounded-none transition-colors duration-300 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]`}>
+                  <header className={`fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-[#00050A]/90 lg:bg-[#00050A]/70 lg:backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/90 lg:bg-[#220000]/70' : 'border-[#002B40]'} flex items-center gap-4 z-50 rounded-none transition-colors duration-300 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]`}>
                     <div className="flex items-center gap-4 lg:gap-6 shrink-0">
                       <div className="flex items-center gap-2 whitespace-nowrap" title="Joint Integrated Air and Missile Defense">
                         <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
@@ -2635,8 +2635,8 @@ export default function App() {
         </button>
       </footer>
 
-      {/* CRT Overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 mix-blend-overlay opacity-20 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+      {/* CRT Overlay (Hidden on mobile for performance) */}
+      <div className="hidden lg:block fixed inset-0 pointer-events-none z-50 mix-blend-overlay opacity-20 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
     </div>
   );
 }

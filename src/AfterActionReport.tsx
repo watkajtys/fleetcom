@@ -13,7 +13,7 @@ const AfterActionReport = () => {
   const totalFired = Object.values(interceptorsFired).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[#00050A]/95 backdrop-blur-md p-4 text-[#00E5FF] font-mono">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[#00050A]/95 lg:backdrop-blur-md p-4 text-[#00E5FF] font-mono">
       <div className="max-w-3xl w-full border border-[#004466] bg-[#001A26]/90 flex flex-col shadow-2xl shadow-[#00E5FF]/20 overflow-hidden">
         
         {/* Header */}
