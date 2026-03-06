@@ -53,5 +53,6 @@ body {
   background-color: #030712; /* Very dark, almost black */
   color: #e2e8f0; /* slate-200 for better readability than pure cyan */
   overflow: hidden;
+  overscroll-behavior-y: none;
 }
 

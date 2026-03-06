@@ -1,0 +1,15 @@
+{
+  "short_name": "FLEETCOM",
+  "name": "FLEETCOM: Tactical Air Defense Simulator",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%2300050A' stroke='%2300E5FF' stroke-width='4'/%3E%3Cpath d='M50 20 L80 80 L50 65 L20 80 Z' fill='%2300E5FF'/%3E%3C/svg%3E",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#00050A",
+  "background_color": "#00050A"
+}

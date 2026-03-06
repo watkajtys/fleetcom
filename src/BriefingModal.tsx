@@ -35,21 +35,27 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
         {/* Content */}
         <div className="p-6 space-y-6">
           
-          <div className="grid grid-cols-3 gap-4 border-b border-[#004466]/50 pb-4 text-xs">
-            <div>
+          <div className="flex flex-col md:grid md:grid-cols-3 gap-4 border-b border-[#004466]/50 pb-4 text-xs">
+            <div className="flex justify-between md:block">
               <div className="text-[#004466] mb-1">LOCAL TERMINAL</div>
-              <div className="text-base lg:text-lg">{userTimeStr}</div>
-              <div className="opacity-70 text-[10px]">{userDateStr}</div>
+              <div className="text-right md:text-left">
+                <div className="text-base lg:text-lg">{userTimeStr}</div>
+                <div className="opacity-70 text-[10px]">{userDateStr}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-[#004466] mb-1 text-center">SECTOR (GST)</div>
-              <div className="text-base lg:text-lg text-[#FFCC00] text-center">{gstTimeStr}</div>
-              <div className="opacity-70 text-[#FFCC00]/70 text-[10px] text-center">{gstDateStr}</div>
+            <div className="flex justify-between md:block">
+              <div className="text-[#004466] mb-1 md:text-center">SECTOR (GST)</div>
+              <div className="text-right md:text-center">
+                <div className="text-base lg:text-lg text-[#FFCC00]">{gstTimeStr}</div>
+                <div className="opacity-70 text-[#FFCC00]/70 text-[10px]">{gstDateStr}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-[#004466] mb-1 text-right">ZULU (UTC)</div>
-              <div className="text-base lg:text-lg text-right">{zuluTimeStr}</div>
-              <div className="opacity-70 text-[10px] text-right">GLOBAL REF</div>
+            <div className="flex justify-between md:block">
+              <div className="text-[#004466] mb-1 md:text-right">ZULU (UTC)</div>
+              <div className="text-right">
+                <div className="text-base lg:text-lg">{zuluTimeStr}</div>
+                <div className="opacity-70 text-[10px]">GLOBAL REF</div>
+              </div>
             </div>
           </div>
 
@@ -130,10 +136,14 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-[#00111A] border-t border-[#004466] flex justify-end">
+        <div className="p-4 bg-[#00111A] border-t border-[#004466] flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
+          <div className="flex flex-col text-[10px] text-[#00E5FF]/50 tracking-widest font-mono text-center sm:text-left">
+            <span>SYS.ARCHITECT // <a href="https://builtbyvibes.com" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">VIBES</a></span>
+            <span>OP.COMM // <a href="https://twitter.com/arethevibesoff" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">@ARETHEVIBESOFF</a></span>
+          </div>
           <button 
             onClick={onStart}
-            className="px-6 py-2 bg-[#002B40] text-[#00E5FF] border border-[#00E5FF] font-bold tracking-widest hover:bg-[#00E5FF] hover:text-[#00050A] transition-colors"
+            className="w-full sm:w-auto px-6 py-2 bg-[#002B40] text-[#00E5FF] border border-[#00E5FF] font-bold tracking-widest hover:bg-[#00E5FF] hover:text-[#00050A] transition-colors"
           >
             ACKNOWLEDGE & INITIALIZE NODE
           </button>

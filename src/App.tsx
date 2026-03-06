@@ -213,13 +213,12 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
 import { useTrackStore } from './store';
 
 const trackSymbolAreEqual = (
-  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any },
-  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any }
+  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number },
+  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number }
 ) => {
   if (prevProps.trackId !== nextProps.trackId) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
   if (prevProps.cameraZoom !== nextProps.cameraZoom) return false;
-  if (prevProps.filters !== nextProps.filters) return false;
   return true;
 };
 
@@ -287,21 +286,12 @@ const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime,
   );
 });
 
-const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any }) => {
+const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom }: { trackId: string, isHooked: boolean, cameraZoom: number }) => {
   const track = useTrackStore(state => state.tracks[trackId]);
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
   const currentSimTime = nowStore.now;
   
   if (!track || track.detected === false) return null;
-
-  const showTrack = (
-    (filters.showUnknowns || (track.type !== 'UNKNOWN' && track.type !== 'PENDING')) &&
-    (filters.showFriends || track.type !== 'FRIEND') &&
-    (filters.showNeutrals || (track.type !== 'NEUTRAL' && track.type !== 'ASSUMED_FRIEND')) &&
-    (filters.showHostiles || (track.type !== 'HOSTILE' && track.type !== 'SUSPECT'))
-  );
-
-  if (!showTrack) return null;
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
   if (track.type === 'FRIEND') color = '#00FF33'; // Tactical Green
@@ -1092,7 +1082,7 @@ export default function App() {
 
   const [hookedTrackIds, setHookedTrackIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([
-    { id: 'initial-1', time: getZuluTimeStr(-120000), message: 'SYS: JIAMD NODE INITIALIZED', type: 'INFO', acknowledged: true },
+    { id: 'initial-0', time: getZuluTimeStr(-150000), message: 'SYS: BOOT SEQUENCE INITIATED // BUILTBYVIBES.COM', type: 'INFO', acknowledged: true },
     { id: 'initial-2', time: getZuluTimeStr(-90000), message: 'DATALINK LINK-16: ACTIVE', type: 'INFO', acknowledged: true },
     { id: 'initial-3', time: getZuluTimeStr(-60000), message: 'WCS SET TO TIGHT. WEAPONS HOLD.', type: 'WARN', acknowledged: true },
     { id: 'initial-4', time: getZuluTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
@@ -1105,6 +1095,9 @@ export default function App() {
     autoEngageRocket: false
   });
   const [wcs, setWcs] = useState<'TIGHT' | 'FREE'>('TIGHT');
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [mobileSheetTab, setMobileSheetTab] = useState<'TOTE' | 'LOGS' | 'TRACKS'>('TOTE');
+  const [engageMenuOpen, setEngageMenuOpen] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
   const [isGameStarted, setIsGameStarted] = useState(false);
@@ -1137,6 +1130,7 @@ export default function App() {
   const [camera, setCamera] = useState({ x: BATTERY_POS.x, y: BATTERY_POS.y, zoom: 0.5 });
   const [isDragging, setIsDragging] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, endX: number, endY: number } | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [followedTrackId, setFollowedTrackId] = useState<string | null>(null);
@@ -1709,9 +1703,11 @@ export default function App() {
         }, [addLog, isGameStarted]);
       
         // --- INTERACTION HELPERS ---
+  const activePointers = useRef<Map<number, { clientX: number, clientY: number }>>(new Map());
+  const lastPinchDistance = useRef<number | null>(null);
 
-  const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent, container: HTMLDivElement) => {
-    const svg = container.querySelector('svg');
+  const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent | { clientX: number, clientY: number }, container: HTMLDivElement | SVGSVGElement | Element) => {
+    const svg = container instanceof SVGSVGElement ? container : container.querySelector('svg');
     if (!svg) return { x: 0, y: 0 };
     const pt = svg.createSVGPoint();
     pt.x = e.clientX;
@@ -1721,6 +1717,8 @@ export default function App() {
   }, []);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    activePointers.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+
     const coords = getMapCoords(e, e.currentTarget);
     const lastSweepTime = useTrackStore.getState().lastSweepTime;
     const elapsed = (nowStore.now - lastSweepTime) / 1000;
@@ -1734,7 +1732,7 @@ export default function App() {
       return;
     }
 
-    const CLICK_RADIUS = 2.5; // Slightly larger for easier selection on high-speed targets
+    const CLICK_RADIUS = Math.max(2.5, 4400 / (window.innerWidth * camera.zoom)); // Ensures minimum ~44px hit target size
     const nearbyTracks = useTrackStore.getState().getAllTracks()
       .filter(t => t.detected !== false)
       .filter(t => {
@@ -1743,54 +1741,68 @@ export default function App() {
         return calculateRange(smoothX, smoothY, coords.x, coords.y) <= CLICK_RADIUS;
       });
 
-    if (e.shiftKey) {
-      if (nearbyTracks.length > 0) {
-        const targetId = nearbyTracks[0].id;
-        setHookedTrackIds(prev => prev.includes(targetId) ? prev.filter(id => id !== targetId) : [...prev, targetId]);
-      } else {
-        setIsSelecting(true);
-        setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
-      }
-    } else {
-      if (nearbyTracks.length > 0) {
-        const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
-        const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
-        
-        if (currentIndex !== -1 && nearbyTracks.length > 1) {
-          const nextIndex = (currentIndex + 1) % nearbyTracks.length;
-          setHookedTrackIds([nearbyTracks[nextIndex].id]);
+    if (activePointers.current.size === 1) {
+      if (e.shiftKey || isSelectMode) {
+        if (nearbyTracks.length > 0) {
+          const targetId = nearbyTracks[0].id;
+          setHookedTrackIds(prev => prev.includes(targetId) ? prev.filter(id => id !== targetId) : [...prev, targetId]);
         } else {
-          setHookedTrackIds([nearbyTracks[0].id]);
+          setIsSelecting(true);
+          setSelectionBox({ startX: coords.x, startY: coords.y, endX: coords.x, endY: coords.y });
         }
       } else {
-        // Clicking anywhere on the map that isn't a track immediately drops the selection
-        setHookedTrackIds([]);
+        if (nearbyTracks.length > 0) {
+          const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
+          const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
+          
+          if (currentIndex !== -1 && nearbyTracks.length > 1) {
+            const nextIndex = (currentIndex + 1) % nearbyTracks.length;
+            setHookedTrackIds([nearbyTracks[nextIndex].id]);
+          } else {
+            setHookedTrackIds([nearbyTracks[0].id]);
+          }
+        } else {
+          setHookedTrackIds([]);
+        }
+        
+        setIsDragging(true);
+        setDragStart({ x: e.clientX, y: e.clientY });
+        setFollowedTrackId(null);
       }
+    } else if (activePointers.current.size === 2) {
+      setIsDragging(false);
+      setIsSelecting(false);
+      setSelectionBox(null);
       
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
+      const pointers = Array.from(activePointers.current.values());
+      const dist = Math.hypot(pointers[0].clientX - pointers[1].clientX, pointers[0].clientY - pointers[1].clientY);
+      lastPinchDistance.current = dist;
       setFollowedTrackId(null);
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointers.current.has(e.pointerId)) {
+      activePointers.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+    }
+
     const coords = getMapCoords(e, e.currentTarget);
     nowStore.updateMouse(coords.x, coords.y);
 
-    if (draggingWaypointId) {
+    if (draggingWaypointId && activePointers.current.size === 1) {
       setTracks(current => current.map(t => 
         t.id === draggingWaypointId ? { ...t, targetWaypoint: coords, patrolWaypoint: coords } : t
       ));
       return;
     }
 
-    if (isSelecting && selectionBox) {
+    if (isSelecting && selectionBox && activePointers.current.size === 1) {
       const coords = getMapCoords(e, e.currentTarget);
       setSelectionBox(prev => prev ? { ...prev, endX: coords.x, endY: coords.y } : null);
       return;
     }
 
-    if (isDragging) {
+    if (isDragging && activePointers.current.size === 1) {
       const rect = e.currentTarget.getBoundingClientRect();
       const viewBoxWidth = 100 / camera.zoom;
       const viewBoxHeight = 100 / camera.zoom;
@@ -1804,10 +1816,36 @@ export default function App() {
         y: prev.y - dy * scale
       }));
       setDragStart({ x: e.clientX, y: e.clientY });
+    } else if (activePointers.current.size === 2) {
+      const pointers = Array.from(activePointers.current.values());
+      const currentDist = Math.hypot(pointers[0].clientX - pointers[1].clientX, pointers[0].clientY - pointers[1].clientY);
+      
+      if (lastPinchDistance.current !== null) {
+        const delta = currentDist - lastPinchDistance.current;
+        const zoomDelta = delta * 0.005;
+        
+        setCamera(prev => {
+          const newZoom = Math.min(10, Math.max(0.5, prev.zoom + zoomDelta));
+          return { ...prev, zoom: newZoom };
+        });
+      }
+      
+      lastPinchDistance.current = currentDist;
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    activePointers.current.delete(e.pointerId);
+
+    if (activePointers.current.size < 2) {
+      lastPinchDistance.current = null;
+    }
+
+    if (activePointers.current.size === 1) {
+      const remainingPointer = Array.from(activePointers.current.values())[0];
+      setDragStart({ x: remainingPointer.clientX, y: remainingPointer.clientY });
+    }
+
     if (draggingWaypointId) {
       setDraggingWaypointId(null);
       return;
@@ -1821,7 +1859,6 @@ export default function App() {
       const lastSweepTime = useTrackStore.getState().lastSweepTime;
       const elapsed = (nowStore.now - lastSweepTime) / 1000;
 
-      // Identify tracks in box
       const inBox = useTrackStore.getState().getAllTracks()
         .filter(t => t.detected !== false)
         .filter(t => {
@@ -1832,18 +1869,18 @@ export default function App() {
         .map(t => t.id);
 
       if (inBox.length > 0) {
-        setHookedTrackIds(prev => e.shiftKey ? Array.from(new Set([...prev, ...inBox])) : inBox);
+        setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inBox])) : inBox);
         addLog(`GROUP HOOK: ${inBox.length} TRACKS SELECTED`, 'INFO');
-      } else if (!e.shiftKey) {
-        // Only clear if not adding to selection
-        // Actually, if you draw an empty box, it usually clears.
+      } else if (!e.shiftKey && !isSelectMode) {
         setHookedTrackIds([]);
       }
     }
 
-    setIsDragging(false);
-    setIsSelecting(false);
-    setSelectionBox(null);
+    if (activePointers.current.size === 0) {
+      setIsDragging(false);
+      setIsSelecting(false);
+      setSelectionBox(null);
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -2127,7 +2164,10 @@ export default function App() {
   });
 
   return (
-    <div className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]">
+    <div 
+      className="h-screen w-screen bg-[#00050A] text-[#00E5FF] font-mono flex flex-col overflow-hidden select-none selection:bg-[#004466] relative tabular-nums [font-variant-numeric:slashed-zero]"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {!isGameStarted && <BriefingModal onStart={() => setIsGameStarted(true)} />}
       {isGameOver && <AfterActionReport />}
       
@@ -2176,8 +2216,18 @@ export default function App() {
           ))}
 
                     {trackIds.map(trackId => {
-                      const track = useTrackStore.getState().tracks[trackId];
-                      if (!track) return null;
+                                            const track = useTrackStore.getState().tracks[trackId];
+                                            if (!track) return null;
+                      
+                                            // Filter visibility check (moved out of TrackSymbol to prevent re-renders)
+                                            const isVisible = (
+                                              (filters.showUnknowns || (track.type !== 'UNKNOWN' && track.type !== 'PENDING')) &&
+                                              (filters.showFriends || track.type !== 'FRIEND') &&
+                                              (filters.showNeutrals || (track.type !== 'NEUTRAL' && track.type !== 'ASSUMED_FRIEND')) &&
+                                              (filters.showHostiles || (track.type !== 'HOSTILE' && track.type !== 'SUSPECT'))
+                                            );
+                      
+                                            if (!isVisible && !hookedTrackIds.includes(trackId)) return null;
                       
                       // Viewport Culling
                       const viewBoxWidth = 100 / camera.zoom;
@@ -2207,7 +2257,6 @@ export default function App() {
                           trackId={trackId} 
                           isHooked={hookedTrackIds.includes(trackId)} 
                           cameraZoom={camera.zoom} 
-                          filters={filters} 
                         />
                       );
                     })}
@@ -2229,7 +2278,7 @@ export default function App() {
       </div>
 
             {/* --- TOP STATUS BAR --- */}
-                  <header className={`fixed top-0 left-0 right-0 h-16 bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between px-4 z-50 rounded-none transition-colors duration-300 shrink-0`}>
+                  <header className={`fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between z-50 rounded-none transition-colors duration-300 shrink-0`}>
                     <div className="flex items-center gap-4 lg:gap-6">
                       <div className="flex items-center gap-2 whitespace-nowrap" title="Joint Integrated Air and Missile Defense">
                         <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
@@ -2257,13 +2306,13 @@ export default function App() {
             </header>
       
             {/* --- MAIN CONTENT AREA --- */}
-            <main className="fixed inset-0 top-16 bottom-16 z-20 pointer-events-none overflow-hidden">
+            <main className="fixed inset-0 top-[calc(4rem+env(safe-area-inset-top))] bottom-[calc(4rem+env(safe-area-inset-bottom))] left-[env(safe-area-inset-left)] right-[env(safe-area-inset-right)] z-20 pointer-events-none overflow-hidden">
               
               {/* LEFT DRAGGABLE WINDOW */}
               <DraggableWindow 
                 title="TRACK SUMMARY & LOGS" 
                 defaultPos={{ x: 16, y: 16 }} 
-                className="w-[280px] max-h-[calc(100vh-160px)]"
+                className="w-[280px] max-h-[calc(100vh-160px)] hidden lg:flex flex-col"
               >
                 <div className="flex flex-col gap-4 p-4 h-full overflow-hidden">
                   <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
@@ -2275,17 +2324,74 @@ export default function App() {
               <DraggableWindow 
                 title="TOTE & DOCTRINE" 
                 defaultPos={{ x: window.innerWidth ? window.innerWidth - 276 : 1000, y: 16 }} 
-                className="w-[260px] max-h-[calc(100vh-160px)]"
+                className="w-[260px] max-h-[calc(100vh-160px)] hidden lg:flex flex-col"
               >
                 <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} doctrine={doctrine} setDoctrine={setDoctrine} filters={filters} setFilters={setFilters} wcs={wcs} setWcs={setWcs} />
               </DraggableWindow>
+
+              {/* MOBILE UNIFIED BOTTOM SHEET */}
+              <div className={`fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 bg-[#00050A]/95 border-t border-[#00E5FF] shadow-[0_-5px_20px_rgba(0,229,255,0.1)] transition-transform duration-300 z-[60] flex flex-col pointer-events-auto ${mobileSheetOpen ? 'translate-y-0 h-[60vh]' : 'translate-y-full h-[60vh]'}`}>
+                {/* Pull Handle */}
+                <div 
+                  className="absolute -top-8 left-1/2 -translate-x-1/2 w-24 h-8 bg-[#00050A]/95 border-t border-x border-[#00E5FF] rounded-t-lg flex items-center justify-center cursor-pointer pointer-events-auto"
+                  onClick={() => setMobileSheetOpen(!mobileSheetOpen)}
+                >
+                  <div className="w-12 h-1 bg-[#00E5FF]/50 rounded-full" />
+                </div>
+                
+                {/* Tabs */}
+                <div className="flex border-b border-[#002B40] shrink-0">
+                  <button 
+                    className={`flex-1 py-3 text-xs font-bold tracking-widest ${mobileSheetTab === 'TOTE' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
+                    onClick={() => setMobileSheetTab('TOTE')}
+                  >
+                    TOTE
+                  </button>
+                  <button 
+                    className={`flex-1 py-3 text-xs font-bold tracking-widest ${mobileSheetTab === 'TRACKS' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
+                    onClick={() => setMobileSheetTab('TRACKS')}
+                  >
+                    TRACKS
+                  </button>
+                  <button 
+                    className={`flex-1 py-3 text-xs font-bold tracking-widest ${mobileSheetTab === 'LOGS' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
+                    onClick={() => setMobileSheetTab('LOGS')}
+                  >
+                    LOGS
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                  {mobileSheetTab === 'TOTE' && (
+                    <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} doctrine={doctrine} setDoctrine={setDoctrine} filters={filters} setFilters={setFilters} wcs={wcs} setWcs={setWcs} />
+                  )}
+                  {mobileSheetTab === 'TRACKS' && (
+                    <TrackSummaryTable hookedTrackIds={hookedTrackIds} setHookedTrackIds={setHookedTrackIds} filters={filters} setFilters={setFilters} />
+                  )}
+                  {mobileSheetTab === 'LOGS' && (
+                    <SystemEventLog logs={logs} />
+                  )}
+                </div>
+              </div>
               
             </main>
       
             {/* --- BOTTOM SOFT KEY BAR --- */}
-            <footer className="fixed bottom-0 left-0 right-0 h-16 bg-[#00050A]/95 border-t border-[#002B40] flex items-center px-2 lg:px-4 gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <footer className="fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] bg-[#00050A]/95 border-t border-[#002B40] flex items-center gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
         
+        <button 
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[10px] lg:text-xs font-bold tracking-widest transition-all flex flex-col items-center justify-center whitespace-nowrap ${
+            isSelectMode ? 'bg-[#00E5FF] border-[#00E5FF] text-[#00050A]' : 'bg-[#001A26] border-[#004466] text-[#00E5FF]'
+          }`}
+          onClick={() => setIsSelectMode(!isSelectMode)}
+          title="Toggle Multi-Select Mode (Drag to select multiple tracks)"
+        >
+          <span className={`text-[8px] mb-0.5 ${isSelectMode ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>~</span>
+          MULTI
+        </button>
+
         <button 
           className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
             buttonFeedback['1'] === 'action' ? 'bg-[#004466] border-[#00E5FF] brightness-150 scale-[0.98]' : 'bg-[#001A26] border-[#004466]'
@@ -2341,8 +2447,32 @@ export default function App() {
           IFF ALL
         </button>
 
+        <div className="hidden lg:flex w-px h-8 bg-[#002B40] mx-1 lg:mx-2 shrink-0" />
+
+        {/* Mobile Unified Engage Button */}
+        <div className="relative lg:hidden ml-auto">
+          <button 
+            className={`h-10 px-4 border hover:bg-[#440000] text-[#FF0033] text-[10px] font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+              engageMenuOpen ? 'bg-[#660000] border-[#FF0033] brightness-150 scale-[0.98]' : 'bg-[#330000] border-[#FF0033]'
+            }`}
+            disabled={hookedTrackIds.length === 0}
+            onClick={() => setEngageMenuOpen(!engageMenuOpen)}
+          >
+            ENGAGE ▼
+          </button>
+          
+          {engageMenuOpen && (
+            <div className="absolute bottom-full mb-2 right-0 flex flex-col gap-2 bg-[#00050A]/95 p-2 border border-[#FF0033] shadow-[0_0_15px_rgba(255,0,51,0.2)]">
+              <button className="h-10 px-4 border border-[#FF00FF] bg-[#330033] text-[#FF00FF] text-[10px] font-bold tracking-widest whitespace-nowrap" onClick={() => { handleEngage('THAAD'); setEngageMenuOpen(false); }}>THAAD</button>
+              <button className="h-10 px-4 border border-[#FF0033] bg-[#330000] text-[#FF0033] text-[10px] font-bold tracking-widest whitespace-nowrap" onClick={() => { handleEngage('PAC-3'); setEngageMenuOpen(false); }}>PAC-3</button>
+              <button className="h-10 px-4 border border-[#FFCC00] bg-[#222200] text-[#FFCC00] text-[10px] font-bold tracking-widest whitespace-nowrap" onClick={() => { handleEngage('TAMIR'); setEngageMenuOpen(false); }}>TAMIR</button>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Individual Engage Buttons */}
         <button 
-          className={`h-10 px-2 lg:px-4 border hover:bg-[#440033] text-[#FF00FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center ml-auto whitespace-nowrap ${
+          className={`hidden lg:flex h-10 px-2 lg:px-4 border hover:bg-[#440033] text-[#FF00FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-col items-center justify-center ml-auto whitespace-nowrap ${
             buttonFeedback['4'] === 'action' ? 'bg-[#660066] border-[#FF00FF] brightness-150 scale-[0.98]' : 'bg-[#330033] border-[#FF00FF]'
           }`}
           disabled={hookedTrackIds.length === 0}
@@ -2353,7 +2483,7 @@ export default function App() {
         </button>
 
         <button 
-          className={`h-10 px-2 lg:px-4 border hover:bg-[#440000] text-[#FF0033] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+          className={`hidden lg:flex h-10 px-2 lg:px-4 border hover:bg-[#440000] text-[#FF0033] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-col items-center justify-center whitespace-nowrap ${
             buttonFeedback['5'] === 'action' ? 'bg-[#660000] border-[#FF0033] brightness-150 scale-[0.98]' : 'bg-[#330000] border-[#FF0033]'
           }`}
           disabled={hookedTrackIds.length === 0}
@@ -2364,7 +2494,7 @@ export default function App() {
         </button>
 
         <button 
-          className={`h-10 px-2 lg:px-4 border hover:bg-[#333300] text-[#FFCC00] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
+          className={`hidden lg:flex h-10 px-2 lg:px-4 border hover:bg-[#333300] text-[#FFCC00] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-col items-center justify-center whitespace-nowrap ${
             buttonFeedback['6'] === 'action' ? 'bg-[#666600] border-[#FFCC00] brightness-150 scale-[0.98]' : 'bg-[#222200] border-[#FFCC00]'
           }`}
           disabled={hookedTrackIds.length === 0}
@@ -2392,6 +2522,19 @@ export default function App() {
 
       {/* CRT Overlay */}
       <div className="fixed inset-0 pointer-events-none z-50 mix-blend-overlay opacity-20 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+      
+      {/* Portrait Orientation Lock Overlay */}
+      <div className="fixed inset-0 z-[100] bg-[#030712] flex-col items-center justify-center hidden portrait:flex">
+        <div className="text-[#00E5FF] border border-[#00E5FF] bg-[#001A26] p-8 text-center max-w-md mx-4 animate-pulse">
+          <svg className="w-16 h-16 mx-auto mb-6 text-[#00E5FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 10l-4 4-4-4" transform="translate(4, 5) rotate(-90 8 10)" />
+          </svg>
+          <h2 className="text-xl font-bold tracking-widest mb-2">SYSTEM ERROR</h2>
+          <p className="text-sm font-mono text-[#00E5FF]/80">TACTICAL DISPLAY REQUIRES LANDSCAPE ORIENTATION.</p>
+          <p className="text-xs font-mono text-[#00E5FF]/50 mt-4">PLEASE ROTATE DEVICE</p>
+        </div>
+      </div>
     </div>
   );
 }

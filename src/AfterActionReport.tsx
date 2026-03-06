@@ -27,7 +27,7 @@ const AfterActionReport = () => {
           </div>
         </div>
 
-        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 overflow-auto max-h-[80vh]">
+        <div className="p-4 md:p-8 flex flex-col md:grid md:grid-cols-2 gap-8 overflow-y-auto max-h-[calc(100vh-12rem)] md:max-h-[80vh]">
           
           {/* Left Column: Combat Stats */}
           <div className="space-y-6">
@@ -107,6 +107,16 @@ const AfterActionReport = () => {
 
         {/* Footer */}
         <div className="p-6 bg-[#00111A] border-t border-[#004466] flex flex-col items-center gap-4">
+          <div className="flex justify-center gap-8 w-full border-b border-[#004466]/30 pb-4 mb-2">
+             <div className="text-center text-[10px] tracking-widest text-[#00E5FF]/50">
+               SYS.ARCHITECT <br/>
+               <a href="https://builtbyvibes.com" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">BUILTBYVIBES.COM</a>
+             </div>
+             <div className="text-center text-[10px] tracking-widest text-[#00E5FF]/50">
+               SYS.COMMUNICATIONS <br/>
+               <a href="https://twitter.com/arethevibesoff" target="_blank" rel="noopener noreferrer" className="text-[#00E5FF] font-bold hover:text-[#00FF33] transition-colors">@ARETHEVIBESOFF</a>
+             </div>
+          </div>
           <p className="text-[10px] text-center max-w-md opacity-50">
             This data has been synthesized for the UAE Ministry of Defense. Share these results to improve regional air defense awareness.
           </p>
