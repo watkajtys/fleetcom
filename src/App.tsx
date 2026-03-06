@@ -623,8 +623,10 @@ const SystemClock = React.memo(() => {
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
-  const huntressLogs = logs.filter(l => l.message.startsWith('HUNTRESS:'));
-  const sysLogs = logs.filter(l => !l.message.startsWith('HUNTRESS:'));
+  const isNarrativeLog = (msg: string) => msg.startsWith('HUNTRESS:') || msg.startsWith('ATC:') || msg.startsWith('INTEL:');
+  
+  const huntressLogs = logs.filter(l => isNarrativeLog(l.message));
+  const sysLogs = logs.filter(l => !isNarrativeLog(l.message));
 
   return (
     <div className="flex flex-col gap-2 shrink-0">
@@ -647,7 +649,7 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
                 log.type === 'ALERT' ? 'text-white font-bold' :
                 log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' :
                 'text-[#FFCC00]'
-              }`}>{log.message.replace('HUNTRESS: ', '')}</span>
+              }`}>{log.message.replace(/^(HUNTRESS|ATC|INTEL):\s*/, '')}</span>
             </div>
           ))}
           {huntressLogs.length === 0 && (
@@ -1595,8 +1597,7 @@ export default function App() {
                 const invKey = weaponToUse.toLowerCase().replace('-3', '3') as keyof typeof inventory;
                 inventoryRef.current[invKey]--;
                 incrementInterceptorsFired(weaponToUse);
-                const costStr = stats.cost >= 1000000 ? `$${(stats.cost / 1000000).toFixed(1)}M` : `$${Math.round(stats.cost / 1000)}K`;
-                events.push({ type: 'LOG', message: `AUTO-ENGAGE TRK ${updatedTrack.id} (${weaponToUse}) [${costStr}]`, logType: 'ACTION' });
+                events.push({ type: 'LOG', message: `AUTO-ENGAGE TRK ${updatedTrack.id} (${weaponToUse})`, logType: 'ACTION' });
                 events.push({ type: 'COST', amount: stats.cost });
 
                 updatedTrack.interceptors = [...(updatedTrack.interceptors || []), newInterceptor];
@@ -1611,9 +1612,7 @@ export default function App() {
                 const rngToAsset = calculateRange(updatedTrack.x, updatedTrack.y, asset.x, asset.y, updatedTrack.alt, 0);
                 if (rngToAsset <= 2.5) {
                   incrementInterceptorsFired('C-RAM');
-                  const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
-                  events.push({ type: 'LOG', message: `C-RAM (${asset.id}) ENGAGING LEAKER TRK ${updatedTrack.id} (-${costStr})`, logType: 'ACTION' });
-                  events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
+                                    events.push({ type: 'LOG', message: `C-RAM (${asset.id}) ENGAGING LEAKER TRK ${updatedTrack.id}`, logType: 'ACTION' });                  events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
                   
                   const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, updatedTrack, WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC);
                   const interceptTimeSecs = rngToAsset / Math.max(0.1, closureRate);
