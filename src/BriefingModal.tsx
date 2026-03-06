@@ -61,22 +61,68 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
               <span className="text-[#FF0033] font-bold">THREAT UPDATE:</span> Intelligence indicates a high probability of a coordinated, multi-domain strike by non-state actors targeting critical infrastructure in Dubai (Port Rashid, DWC, Burj Khalifa).
             </p>
             
-            <div className="bg-[#00050A]/50 p-4 border border-[#004466]">
-              <h3 className="text-[#00FFFF] font-bold mb-2">RULES OF ENGAGEMENT (ROE):</h3>
-              <ul className="list-disc pl-5 space-y-1 text-xs opacity-90">
-                <li><strong className="text-[#FFCC00]">WEAPONS CONTROL STATUS (WCS) IS TIGHT:</strong> Fire only at targets positively identified as <span className="text-[#FF0033]">HOSTILE</span>.</li>
-                <li>Do not fire terminal interceptors (TAMIR/IRON DOME) at manned aircraft or exospheric ballistics.</li>
-                <li><strong className="text-[#FFCC00]">CONSERVATION OF FIRES:</strong> You have a limited magazine. Do not waste $4.5M PAC-3 missiles on $20K commercial drones. Use your layered defense.</li>
-              </ul>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-[#00050A]/50 p-4 border border-[#004466]">
+                <h3 className="text-[#00FFFF] font-bold text-[10px] mb-2 uppercase tracking-tighter">Interceptor Catalog // Economic Profile</h3>
+                <div className="space-y-2 text-[10px]">
+                  <div className="flex justify-between border-b border-[#004466]/30 pb-1">
+                    <span className="text-[#FF00FF]">THAAD (T1)</span>
+                    <span className="text-[#00E5FF]">$13,000,000</span>
+                  </div>
+                  <div className="flex justify-between border-b border-[#004466]/30 pb-1">
+                    <span className="text-[#FF0033]">PAC-3 MSE (T2)</span>
+                    <span className="text-[#00E5FF]">$4,500,000</span>
+                  </div>
+                  <div className="flex justify-between border-b border-[#004466]/30 pb-1">
+                    <span className="text-[#FFCC00]">TAMIR (T3)</span>
+                    <span className="text-[#00E5FF]">$50,000</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#00FF33]">C-RAM (T4)</span>
+                    <span className="text-[#00E5FF]">$500</span>
+                  </div>
+                </div>
+                <div className="mt-3 text-[9px] text-[#FFCC00] leading-tight italic opacity-80">
+                  Note: Strategic failure occurs if defense cost exceeds political threshold. Prioritize layered attrition.
+                </div>
+              </div>
 
-            <div className="bg-[#00050A]/50 p-4 border border-[#004466]">
-              <h3 className="text-[#00FFFF] font-bold mb-2">TERMINAL CONTROLS:</h3>
-              <div className="grid grid-cols-2 gap-2 text-xs opacity-90">
-                <div><span className="text-[#FFCC00]">CLICK Track:</span> Hook target data</div>
-                <div><span className="text-[#FFCC00]">SHIFT + DRAG:</span> Box select group</div>
-                <div><span className="text-[#FFCC00]">CLICK Empty Space:</span> Drop selection</div>
-                <div><span className="text-[#FFCC00]">KEYS 1-7:</span> OSD Soft Key shortcuts</div>
+              <div className="bg-[#00050A]/50 p-4 border border-[#004466]">
+                <h3 className="text-[#00FFFF] font-bold text-[10px] mb-2 uppercase tracking-tighter">OSD Soft Keys // Terminal Access</h3>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+                  <div className="flex gap-2">
+                    <span className="bg-[#004466] text-[#00E5FF] px-1 font-bold min-w-[12px] text-center">1</span>
+                    <span className="opacity-80">DROP</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="bg-[#004466] text-[#00E5FF] px-1 font-bold min-w-[12px] text-center">2</span>
+                    <span className="opacity-80">IFF</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="bg-[#004466] text-[#00E5FF] px-1 font-bold min-w-[12px] text-center">3</span>
+                    <span className="opacity-80">DECLARE</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="bg-[#004466] text-[#FF00FF] px-1 font-bold min-w-[12px] text-center">4</span>
+                    <span className="opacity-80 font-bold">THAAD</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="bg-[#004466] text-[#FF0033] px-1 font-bold min-w-[12px] text-center">5</span>
+                    <span className="opacity-80 font-bold">PAC-3</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="bg-[#004466] text-[#FFCC00] px-1 font-bold min-w-[12px] text-center">6</span>
+                    <span className="opacity-80 font-bold">TAMIR</span>
+                  </div>
+                  <div className="flex gap-2 col-span-2 mt-1 border-t border-[#004466]/30 pt-1.5">
+                    <span className="text-[#FFCC00] font-bold">[SPACE]</span>
+                    <span className="opacity-80">PAUSE SIMULATION</span>
+                  </div>
+                  <div className="flex gap-2 col-span-2">
+                    <span className="text-[#FFCC00] font-bold">[SHIFT+DRAG]</span>
+                    <span className="opacity-80">MULTI-HOOK</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -89,7 +135,7 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
             onClick={onStart}
             className="px-6 py-2 bg-[#002B40] text-[#00E5FF] border border-[#00E5FF] font-bold tracking-widest hover:bg-[#00E5FF] hover:text-[#00050A] transition-colors"
           >
-            ACKNOWLEDGE & START SHIFT
+            ACKNOWLEDGE & INITIALIZE NODE
           </button>
         </div>
 

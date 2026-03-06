@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Track, TrackType, SystemLog } from './types';
+import { Track, TrackType, SystemLog, EngagementDoctrine } from './types';
 import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSETS } from './constants';
-import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate } from './utils';
+import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate, MACH_TO_NM_SEC } from './utils';
 import { MISSION_STEPS } from './mission';
 import { processFighters } from './ai';
 import { useSyncExternalStore } from 'react';
@@ -95,7 +95,7 @@ const getZuluTimeStr = (offsetMs: number = 0) => {
   return now.toISOString().substring(11, 19) + 'Z';
 };
 
-const MissileVector = React.memo(({ interceptor, track, color, cameraZoom }: { interceptor: any, track: Track, color: string, cameraZoom: number }) => {
+const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showTti }: { interceptor: any, track: Track, color: string, cameraZoom: number, showTti: boolean }) => {
   const _renderTrigger = useNow(); // Triggers the RAF loop
   const currentSimTime = nowStore.now; // The actual physics time
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
@@ -117,34 +117,63 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom }: { i
   const startX = interceptor.launchPos.x;
   const startY = interceptor.launchPos.y;
 
+  const rad = track.hdg * Math.PI / 180;
+  const sinH = Math.sin(rad);
+  const cosH = Math.cos(rad);
+  const spdNmSec = track.spd / 3600;
+
   // 3. Predict where the target is RIGHT NOW (Interpolated)
-  const currentTargetX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
-  const currentTargetY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsedSinceLastSweep);
+  const currentTargetX = track.x + sinH * (spdNmSec * elapsedSinceLastSweep);
+  const currentTargetY = track.y - cosH * (spdNmSec * elapsedSinceLastSweep);
 
   // 4. Predict where the target WILL BE at impact (Lead Point)
   // Use the remaining duration rather than smoothTti to ensure the lead point stays stable
   const remainingSecs = (interceptor.interceptDuration - elapsedSinceLaunch) / 1000;
-  const targetLeadX = currentTargetX + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * remainingSecs);
-  const targetLeadY = currentTargetY - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * remainingSecs);
+  const targetLeadX = currentTargetX + sinH * (spdNmSec * remainingSecs);
+  const targetLeadY = currentTargetY - cosH * (spdNmSec * remainingSecs);
 
-  // 5. Interpolate missile position along the stable track to the lead point
-  const missileX = startX + (targetLeadX - startX) * progress;
-  const missileY = startY + (targetLeadY - startY) * progress;
+  // 5. Interpolate missile position
+  let missileX = startX + (targetLeadX - startX) * progress;
+  let missileY = startY + (targetLeadY - startY) * progress;
+
+  // 6. Visual Miss Logic: If this is a miss, start drifting off-target in the final 15% of flight
+  if (interceptor.isPkHit === false && progress > 0.85) {
+    const missProgress = (progress - 0.85) / 0.15;
+    // Drift by up to 2.5 NM by impact time
+    const driftX = Math.sin(interceptor.engagementTime) * 2.5 * missProgress;
+    const driftY = Math.cos(interceptor.engagementTime) * 2.5 * missProgress;
+    missileX += driftX;
+    missileY += driftY;
+  }
 
   const dx = targetLeadX - missileX;
   const dy = targetLeadY - missileY;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const leadX = dist > 0 ? missileX + (dx / dist) * Math.min(2.0, dist) : missileX;
-  const leadY = dist > 0 ? missileY + (dy / dist) * Math.min(2.0, dist) : missileY;
+  
+  // Visual stabilization: Avoid harsh length cutoff when getting close
+  const visualHeadLength = Math.min(2.0, dist * 0.5); 
+  const leadX = dist > 0 ? missileX + (dx / dist) * visualHeadLength : missileX;
+  const leadY = dist > 0 ? missileY + (dy / dist) * visualHeadLength : missileY;
 
   return (
     <g>
       <line x1={startX} y1={startY} x2={missileX} y2={missileY} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" />
-      <line x1={missileX} y1={missileY} x2={leadX} y2={leadY} stroke={color} strokeWidth={0.2 / cameraZoom} className="animate-pulse" />
-      <circle cx={missileX} cy={missileY} r={0.3 / cameraZoom} fill={color} />
-      <text x={missileX} y={missileY - (1.2 / cameraZoom)} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
-        TTI: {Math.ceil(smoothTti)}s
-      </text>
+      {/* If it's a miss and we are in drift, fade the pulse line to indicate loss of track */}
+      <line 
+        x1={missileX} y1={missileY} 
+        x2={leadX} y2={leadY} 
+        stroke={color} 
+        strokeWidth={0.2 / cameraZoom} 
+        className={interceptor.isPkHit === false && progress > 0.9 ? '' : 'animate-pulse'} 
+        opacity={interceptor.isPkHit === false && progress > 0.9 ? 0.3 : 1.0}
+      />
+      <circle cx={missileX} cy={missileY} r={0.3 / cameraZoom} fill={color} opacity={interceptor.isPkHit === false && progress > 0.95 ? 0.5 : 1.0} />
+      {/* Hide TTI if tracking is lost or if explicitly disabled to reduce clutter */}
+      {showTti && !(interceptor.isPkHit === false && progress > 0.9) && (
+        <text x={missileX} y={missileY - (1.2 / cameraZoom)} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
+          TTI: {Math.ceil(smoothTti)}s
+        </text>
+      )}
     </g>
   );
 });
@@ -162,36 +191,51 @@ const trackSymbolAreEqual = (
   return true;
 };
 
+const NTDS_SHAPES: Record<string, string> = {
+  FRIEND: "M 4 14 A 8 8 0 0 1 20 14 Z",
+  ASSUMED_FRIEND: "M 4 14 A 8 8 0 0 1 20 14 Z",
+  HOSTILE: "M 4 14 L 12 4 L 20 14 Z",
+  NEUTRAL: "M 4 14 L 4 4 L 20 4 L 20 14 Z",
+  UNKNOWN: "M 4 14 L 4 8 L 8 4 L 16 4 L 20 8 L 20 14 Z",
+  PENDING: "M 4 14 L 4 8 L 8 4 L 16 4 L 20 8 L 20 14 Z",
+  SUSPECT: "M 4 14 L 4 8 L 8 4 L 16 4 L 20 8 L 20 14 Z"
+};
+
 const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any }) => {
   const track = useTrackStore(state => state.tracks[trackId]);
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
   const _renderTrigger = useNow(); // This triggers the re-render loop
   const currentSimTime = nowStore.now;
+  
   if (!track || track.detected === false) return null;
 
-  if (!filters.showUnknowns && (track.type === 'UNKNOWN' || track.type === 'PENDING')) return null;
-  if (!filters.showFriends && track.type === 'FRIEND') return null;
-  if (!filters.showNeutrals && (track.type === 'NEUTRAL' || track.type === 'ASSUMED_FRIEND')) return null;
-  if (!filters.showHostiles && (track.type === 'HOSTILE' || track.type === 'SUSPECT')) return null;
+  const showTrack = (
+    (filters.showUnknowns || (track.type !== 'UNKNOWN' && track.type !== 'PENDING')) &&
+    (filters.showFriends || track.type !== 'FRIEND') &&
+    (filters.showNeutrals || (track.type !== 'NEUTRAL' && track.type !== 'ASSUMED_FRIEND')) &&
+    (filters.showHostiles || (track.type !== 'HOSTILE' && track.type !== 'SUSPECT'))
+  );
+
+  if (!showTrack) return null;
 
   // Use the global sim time, not the component-local `now` snapshot, to prevent render/physics desync
   const elapsed = (currentSimTime - lastSweepTime) / 1000;
-  const smoothX = track.x + Math.sin(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
-  const smoothY = track.y - Math.cos(track.hdg * Math.PI / 180) * ((track.spd / 3600) * elapsed);
+  const rad = track.hdg * (Math.PI / 180);
+  const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
+  const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
 
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
   if (track.type === 'FRIEND') color = '#00FF33'; // Tactical Green
-  if (track.type === 'ASSUMED_FRIEND' || track.type === 'NEUTRAL') color = '#00FFFF'; // Cyan
-  if (track.type === 'HOSTILE') color = '#FF0000'; // Pure Red
-  if (track.type === 'SUSPECT') color = '#FF8800'; // Orange
+  else if (track.type === 'ASSUMED_FRIEND' || track.type === 'NEUTRAL') color = '#00FFFF'; // Cyan
+  else if (track.type === 'HOSTILE') color = '#FF0000'; // Pure Red
+  else if (track.type === 'SUSPECT') color = '#FF8800'; // Orange
 
-  // Logarithmic velocity vector to handle wide speed range (100kts to 4000kts)
-  // Ensures slow drones have visible leaders while TBMs don't shoot off screen
+  // Logarithmic velocity vector
   const vectorLength = 2.0 * Math.log10(track.spd / 10 + 1); 
 
   return (
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
-      {/* Pairing Lines (Shooter to Target) - Show briefly on launch, or always if track is hooked */}
+      {/* Pairing Lines (Shooter to Target) */}
       {track.interceptors && track.interceptors.map((interceptor) => {
         const age = currentSimTime - interceptor.engagementTime;
         if (age > 1500 && !isHooked) return null;
@@ -208,9 +252,13 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
       })}
 
       {/* Missile Vectors & TTI */}
-      {track.interceptors && track.interceptors.map((interceptor) => (
-        <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} />
-      ))}
+      {track.interceptors && track.interceptors.map((interceptor) => {
+        const age = currentSimTime - interceptor.engagementTime;
+        const showTti = isHooked || age < 1500;
+        return (
+          <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} showTti={showTti} />
+        );
+      })}
 
       {/* Track History Breadcrumbs */}
       {track.history.map((pos, i) => (
@@ -221,29 +269,23 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
         transform={`translate(${smoothX}, ${smoothY})`} 
         className="cursor-pointer"
       >
-        {/* Invisible larger hit area for easier clicking */}
         <circle cx="0" cy="0" r={3 / cameraZoom} fill="transparent" />
 
-        {/* Hook indicator */}
         {isHooked && (
           <rect x={-1.2 / cameraZoom} y={-1.2 / cameraZoom} width={2.4 / cameraZoom} height={2.4 / cameraZoom} fill="none" stroke="#00FFFF" strokeWidth={0.15 / cameraZoom} opacity="0.8" />
         )}
         
-        {/* Velocity Leader */}
         <line 
           x1="0" y1="0" 
-          x2={Math.sin(track.hdg * Math.PI / 180) * vectorLength} 
-          y2={-Math.cos(track.hdg * Math.PI / 180) * vectorLength} 
+          x2={Math.sin(rad) * vectorLength} 
+          y2={-Math.cos(rad) * vectorLength} 
           stroke={color} strokeWidth={0.15 / cameraZoom} opacity="0.8"
           strokeDasharray={track.coasting ? `${0.5 / cameraZoom} ${0.5 / cameraZoom}` : "none"}
         />
 
-        {/* NTDS Air Shapes */}
+        {/* NTDS Air Shapes from lookup */}
         <g transform={`scale(${0.08 / cameraZoom}) translate(-12, -12)`} stroke={color} strokeWidth="3" fill="none" style={{ filter: `drop-shadow(0 0 2px ${color})` }} strokeDasharray={track.coasting ? "4 4" : "none"}>
-          {(track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') && <path d="M 4 14 A 8 8 0 0 1 20 14 Z" />}
-          {track.type === 'HOSTILE' && <path d="M 4 14 L 12 4 L 20 14 Z" />}
-          {(track.type === 'UNKNOWN' || track.type === 'PENDING' || track.type === 'SUSPECT') && <path d="M 4 14 L 4 8 L 8 4 L 16 4 L 20 8 L 20 14 Z" />}
-          {track.type === 'NEUTRAL' && <path d="M 4 14 L 4 4 L 20 4 L 20 14 Z" />}
+          <path d={NTDS_SHAPES[track.type] || NTDS_SHAPES.UNKNOWN} />
         </g>
 
         {/* On-Glass Data Block with Leader Line */}
@@ -389,14 +431,14 @@ const DefendedAssets = React.memo(({ cameraZoom }: { cameraZoom: number }) => {
   return (
   <>
     {Object.values(assets).map(asset => {
-      const color = asset.isDestroyed ? '#FF0033' : '#00E5FF';
+      const color = '#00E5FF';
       return (
       <g key={asset.id} transform={`translate(${asset.x}, ${asset.y})`}>
-        <rect x={-0.8 / cameraZoom} y={-0.8 / cameraZoom} width={1.6 / cameraZoom} height={1.6 / cameraZoom} fill={asset.isDestroyed ? '#FF0033' : 'none'} fillOpacity={asset.isDestroyed ? 0.3 : 1} stroke={color} strokeWidth={0.2 / cameraZoom} />
-        <text x={1.2 / cameraZoom} y={0.5 / cameraZoom} fill={color} fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity={asset.isDestroyed ? 1 : 0.7}>
-          {asset.isDestroyed ? `[DESTROYED] ${asset.name}` : asset.name}
+        <rect x={-0.8 / cameraZoom} y={-0.8 / cameraZoom} width={1.6 / cameraZoom} height={1.6 / cameraZoom} fill={'none'} fillOpacity={1} stroke={color} strokeWidth={0.2 / cameraZoom} />
+        <text x={1.2 / cameraZoom} y={0.5 / cameraZoom} fill={color} fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity={0.7}>
+          {asset.name}
         </text>
-        {asset.hasCram && !asset.isDestroyed && (
+        {asset.hasCram && (
           <>
             <circle cx="0" cy="0" r="2.5" fill="none" stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.2 / cameraZoom}`} opacity="0.5" />
             <text x="0" y="-2.8" fill="#00E5FF" fontSize={0.5 / cameraZoom} fontFamily="monospace" opacity="0.5" textAnchor="middle">C-RAM</text>
@@ -537,7 +579,8 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
-const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, isAutoTamir, setIsAutoTamir, filters, setFilters }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, isAutoTamir: boolean, setIsAutoTamir: React.Dispatch<React.SetStateAction<boolean>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>> }) => {
+const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, doctrine, setDoctrine, filters, setFilters, wcs, setWcs }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, doctrine: EngagementDoctrine, setDoctrine: React.Dispatch<React.SetStateAction<EngagementDoctrine>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>>, wcs: 'TIGHT' | 'FREE', setWcs: (wcs: 'TIGHT' | 'FREE') => void }) => {
+  const _renderTrigger = useNow(); // Triggers the re-render loop for TTI
   const tracksMap = useTrackStore(state => state.tracks);
   const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
 
@@ -551,132 +594,223 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
   const bullRng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y, hookedTrack.alt, 0).toFixed(0).padStart(3, '0') : '';
 
   return (
-    <aside className={`w-[300px] bg-[#001A26]/20 backdrop-blur-md border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-colors duration-300 h-fit pb-0`}>
-      <div className={`px-3 py-2 border-b ${masterWarning ? 'bg-[#440000]/20 border-[#FF0033]' : 'bg-[#001A26]/20 border-[#002B40]'} flex items-center gap-2 shrink-0`}>
-        <span className={masterWarning ? 'text-[#FF0033] font-bold' : 'text-[#00E5FF] font-bold'}>[DATA]</span>
-        <h2 className={`text-xs font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>{isGroup ? `GROUP TRACK DATA (${hookedTracks.length})` : 'HOOKED TRACK DATA'}</h2>
+    <aside className={`w-full bg-[#001A26]/40 backdrop-blur-xl border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-all duration-300 h-fit`}>
+      <div className={`px-3 py-1.5 border-b ${masterWarning ? 'bg-[#440000]/40 border-[#FF0033]' : 'bg-[#001A26]/40 border-[#002B40]'} flex items-center justify-between shrink-0`}>
+        <div className="flex items-center gap-2">
+          <span className={masterWarning ? 'text-[#FF0033] font-bold text-[10px]' : 'text-[#00E5FF] font-bold text-[10px]'}>[SYS]</span>
+          <h2 className={`text-[10px] font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>TACTICAL DATA</h2>
+        </div>
+        <div className={`px-1.5 py-0.5 text-[9px] font-bold border ${wcs === 'FREE' ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#FFCC00]'}`}>
+          WCS: {wcs}
+        </div>
       </div>
       
-      <div className="p-4 flex flex-col gap-4 flex-1">
+      <div className="flex flex-col min-h-0">
         {isGroup ? (
-          <div className="space-y-4">
-            <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
-              <div className="text-[10px] text-[#004466] mb-2 uppercase tracking-tighter">Selection Breakdown</div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="text-[#FF0000]">HOSTILE: {hookedTracks.filter(t => t.type === 'HOSTILE').length}</div>
-                <div className="text-[#00FF33]">FRIENDLY: {hookedTracks.filter(t => t.type === 'FRIEND').length}</div>
-                <div className="text-[#00FFFF]">NEUTRAL/ASM: {hookedTracks.filter(t => t.type === 'NEUTRAL' || t.type === 'ASSUMED_FRIEND').length}</div>
-                <div className="text-[#FFFF00]">PENDING: {hookedTracks.filter(t => t.type === 'PENDING' || t.type === 'UNKNOWN').length}</div>
-                <div className="text-[#FF8800]">SUSPECT: {hookedTracks.filter(t => t.type === 'SUSPECT').length}</div>
-              </div>
+          <div className="p-3 space-y-3">
+            <div className="text-[10px] text-[#004466] uppercase font-bold border-b border-[#002B40] pb-1">Group Summary ({hookedTracks.length})</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+              <div className="text-[#FF0000] flex justify-between"><span>HOSTILE</span> <span>{hookedTracks.filter(t => t.type === 'HOSTILE').length}</span></div>
+              <div className="text-[#00FF33] flex justify-between"><span>FRIENDLY</span> <span>{hookedTracks.filter(t => t.type === 'FRIEND').length}</span></div>
+              <div className="text-[#FFFF00] flex justify-between"><span>PENDING</span> <span>{hookedTracks.filter(t => t.type === 'PENDING' || t.type === 'UNKNOWN').length}</span></div>
+              <div className="text-[#FF8800] flex justify-between"><span>SUSPECT</span> <span>{hookedTracks.filter(t => t.type === 'SUSPECT').length}</span></div>
             </div>
-            <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
-              <div className="text-[10px] text-[#004466] mb-2 uppercase tracking-tighter">Category Summary</div>
-              <div className="space-y-1 text-xs text-[#00E5FF]">
-                {Array.from(new Set(hookedTracks.map(t => t.category))).map(cat => (
-                  <div key={cat} className="flex justify-between border-b border-[#002B40]/30 py-1">
-                    <span>{cat}</span>
-                    <span className="font-bold">{hookedTracks.filter(t => t.category === cat).length}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="pt-2">
+               <div className="text-[9px] text-[#004466] uppercase mb-1">Categories</div>
+               <div className="flex flex-wrap gap-2">
+                 {Array.from(new Set(hookedTracks.map(t => t.category))).map(cat => (
+                   <span key={cat} className="text-[10px] text-[#00E5FF] bg-[#002B40] px-1.5 py-0.5 rounded-sm">{cat}: {hookedTracks.filter(t => t.category === cat).length}</span>
+                 ))}
+               </div>
             </div>
+
+            {/* Group Engagements Grid */}
+            {hookedTracks.some(t => t.interceptors && t.interceptors.length > 0) && (
+              <div className="pt-1.5 space-y-1 border-t border-[#002B40]">
+                <div className="text-[8px] text-[#FF0033] uppercase font-bold flex items-center gap-1 opacity-80">
+                  <div className="w-1 h-1 rounded-full bg-[#FF0033] animate-pulse" />
+                  ENGAGEMENT STATUS
+                </div>
+                <div className="grid grid-cols-4 gap-1 max-h-36 overflow-y-auto custom-scrollbar pr-0.5">
+                  {hookedTracks
+                    .filter(t => t.interceptors && t.interceptors.length > 0)
+                    .map(t => {
+                      // Get the nearest interceptor for this target
+                      const sortedInterceptors = [...t.interceptors].sort((a, b) => 
+                        (a.engagementTime + a.interceptDuration) - (b.engagementTime + b.interceptDuration)
+                      );
+                      const i = sortedInterceptors[0];
+                      const elapsed = nowStore.now - i.engagementTime;
+                      const progress = Math.min(1, Math.max(0, elapsed / i.interceptDuration));
+                      const remainingTti = Math.ceil(Math.max(0, (i.engagementTime + i.interceptDuration - nowStore.now) / 1000));
+                      const closingRng = (i.initialRange || 0) * (1 - progress);
+
+                      return (
+                        <div key={`group-eng-${t.id}`} className="flex gap-0.5 border border-[#FF0033]/20 bg-[#FF0033]/5 p-0.5 min-w-0">
+                          <div className="flex flex-col w-3 text-[7px] text-[#FF0033] font-bold border-r border-[#FF0033]/30 shrink-0 justify-center items-center leading-none">
+                            {t.id.split('').map((char, idx) => <span key={idx}>{char}</span>)}
+                          </div>
+                          <div className="flex flex-col justify-center items-center flex-1 min-w-0 overflow-hidden">
+                            <div className="text-[11px] font-bold text-[#00E5FF] leading-none tabular-nums">{remainingTti}s</div>
+                            <div className="text-[8px] text-[#00E5FF] opacity-50 tabular-nums leading-none mt-0.5">{Math.round(closingRng)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         ) : hookedTrack ? (
-          <>
-            {/* Header Block */}
-            <div className="border border-[#002B40] bg-[#000A14]/30 p-3 flex justify-between items-center">
-              <span className="text-2xl font-bold text-[#00E5FF] tracking-wider">{hookedTrack.id}</span>
-              <span className={`px-2 py-1 text-xs font-bold border ${
-                hookedTrack.type === 'FRIEND' ? 'border-[#00FF33] text-[#00FF33] bg-[#00FF33]/10' :
-                (hookedTrack.type === 'ASSUMED_FRIEND' || hookedTrack.type === 'NEUTRAL') ? 'border-[#00FFFF] text-[#00FFFF] bg-[#00FFFF]/10' :
-                hookedTrack.type === 'HOSTILE' ? 'border-[#FF0000] text-[#FF0000] bg-[#FF0000]/10 animate-pulse' :
-                hookedTrack.type === 'SUSPECT' ? 'border-[#FF8800] text-[#FF8800] bg-[#FF8800]/10' :
-                'border-[#FFFF00] text-[#FFFF00] bg-[#FFFF00]/10'
+          <div className="p-3 space-y-3">
+            {/* Compact Header */}
+            <div className="flex justify-between items-end border-b border-[#002B40] pb-2">
+              <span className="text-xl font-bold text-[#00E5FF] leading-none">{hookedTrack.id}</span>
+              <span className={`text-[10px] font-bold ${
+                hookedTrack.type === 'FRIEND' ? 'text-[#00FF33]' :
+                (hookedTrack.type === 'ASSUMED_FRIEND' || hookedTrack.type === 'NEUTRAL') ? 'text-[#00FFFF]' :
+                hookedTrack.type === 'HOSTILE' ? 'text-[#FF0033]' :
+                hookedTrack.type === 'SUSPECT' ? 'text-[#FF8800]' :
+                'text-[#FFFF00]'
               }`}>
                 {hookedTrack.threatName || hookedTrack.type}
               </span>
             </div>
 
-            {/* Strict Data Grid - Consolidated */}
-            <div className="border border-[#002B40] bg-[#000A14]/30">
-              <div className="grid grid-cols-2 text-xs">
-                
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">CAT / SRC</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold">
-                  {hookedTrack.category} / {hookedTrack.sensor}
-                </div>
-
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">HDG / SPD</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold tabular-nums">
-                  {Math.round(hookedTrack.hdg).toString().padStart(3, '0')} / {Math.round(hookedTrack.spd).toString().padStart(4, '0')}
-                </div>
-                
-                <div className="border-b border-r border-[#002B40] p-2 text-[#004466]">ALTITUDE</div>
-                <div className="border-b border-[#002B40] p-2 text-right text-[#00E5FF] font-bold tabular-nums">
-                  {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : `${Math.round(hookedTrack.alt).toString().padStart(5, '0')} FT`}
-                </div>
-
-                <div className="border-r border-[#002B40] p-2 text-[#004466] flex flex-col">
-                  <span>BRG / RNG</span>
-                  <span className="text-[9px] opacity-50">BULLSEYE</span>
-                </div>
-                <div className="p-2 text-right text-[#00E5FF] font-bold flex flex-col tabular-nums">
-                  <span>{brg} / {rng} NM</span>
-                  <span className="text-[9px] text-[#00FFFF] opacity-80">{bullBrg} / {bullRng} NM</span>
-                </div>
+            {/* Tight Data Grid */}
+            <div className="grid grid-cols-2 text-[10px] gap-y-2">
+              <div className="text-[#004466]">ALTITUDE</div>
+              <div className="text-right text-[#00E5FF] font-bold tabular-nums">
+                {hookedTrack.alt >= 18000 ? `FL${Math.round(hookedTrack.alt/100)}` : `${Math.round(hookedTrack.alt).toLocaleString()} FT`}
               </div>
+
+              <div className="text-[#004466]">SPD / HDG</div>
+              <div className="text-right text-[#00E5FF] font-bold tabular-nums">
+                {Math.round(hookedTrack.spd)}K / {Math.round(hookedTrack.hdg).toString().padStart(3, '0')}°
+              </div>
+
+              <div className="text-[#004466]">BRG / RNG</div>
+              <div className="text-right text-[#00E5FF] font-bold tabular-nums">
+                {brg}° / {rng} NM
+              </div>
+
+              {/* Nearest Interceptor integrated into grid */}
+              {hookedTrack.interceptors && hookedTrack.interceptors.length > 0 && (
+                <>
+                  {(() => {
+                    const sorted = [...hookedTrack.interceptors].sort((a, b) => 
+                      (a.engagementTime + a.interceptDuration) - (b.engagementTime + b.interceptDuration)
+                    );
+                    const i = sorted[0];
+                    const elapsed = nowStore.now - i.engagementTime;
+                    const progress = Math.min(1, Math.max(0, elapsed / i.interceptDuration));
+                    const remainingTti = Math.ceil(Math.max(0, (i.engagementTime + i.interceptDuration - nowStore.now) / 1000));
+                    const closingRng = (i.initialRange || 0) * (1 - progress);
+                    
+                    return (
+                      <React.Fragment key={i.id}>
+                        <div className="text-[#FF0033] font-bold flex items-center gap-1 uppercase">
+                          <div className="w-1 h-1 rounded-full bg-[#FF0033] animate-pulse" />
+                          {i.weapon} TTI / RNG
+                        </div>
+                        <div className="text-right text-[#FF0033] font-bold tabular-nums">
+                          {remainingTti}s / {closingRng.toFixed(1)} NM
+                        </div>
+                      </React.Fragment>
+                    );
+                  })()}
+                </>
+              )}
             </div>
 
-            {/* Fighter Specific Data */}
             {hookedTrack.isFighter && (
-              <div className="border border-[#002B40] bg-[#000A14]/30 p-3">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs text-[#004466]">AAM INVENTORY</span>
-                  <span className="text-xs font-bold text-[#00E5FF]">{hookedTrack.missilesRemaining} / 4</span>
+              <div className="pt-2 space-y-2 border-t border-[#002B40]">
+                <div className="flex justify-between text-[10px]">
+                   <span className="text-[#004466]">WEAPONS / FUEL</span>
+                   <span className="text-[#00E5FF] font-bold">{hookedTrack.missilesRemaining} AMRAAM / {Math.floor(hookedTrack.fuel || 0)} LBS</span>
                 </div>
-                {hookedTrack.fuel !== undefined && hookedTrack.maxFuel !== undefined && (
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-[#004466]">FUEL (LBS)</span>
-                    <span className={`text-xs font-bold ${hookedTrack.fuel < (hookedTrack.maxFuel * 0.25) ? 'text-[#FFCC00] animate-pulse' : 'text-[#00FF33]'}`}>
-                      {Math.floor(hookedTrack.fuel)}
-                    </span>
-                  </div>
-                )}
                 <button
-                  className={`w-full py-2 text-xs font-bold tracking-widest transition-colors border ${
+                  className={`w-full h-8 text-[9px] font-bold tracking-widest border transition-all flex items-center justify-center ${
                     vectoringTrackId === hookedTrack.id
                       ? 'bg-[#00E5FF] text-[#00050A] border-[#00E5FF]'
                       : 'bg-[#001A26] text-[#00E5FF] border-[#004466] hover:bg-[#002B40]'
                   }`}
                   onClick={() => setVectoringTrackId(vectoringTrackId === hookedTrack.id ? null : hookedTrack.id)}
                 >
-                  {vectoringTrackId === hookedTrack.id ? 'CANCEL VECTOR' : 'VECTOR FIGHTER'}
+                  {vectoringTrackId === hookedTrack.id ? 'CANCEL VECTOR' : 'VECTOR COMMAND'}
                 </button>
               </div>
             )}
-
-            {/* Threat Warning */}
-            {hookedTrack.type === 'HOSTILE' && (
-              <div className="border border-[#FF0033] bg-[#220000]/50 p-3">
-                <div className="flex items-center gap-2 text-[#FF0033] mb-1 text-xs font-bold">
-                  <span>[WARN]</span>
-                  THREAT WARNING
-                </div>
-                <div className="text-[10px] text-[#FF0033] font-bold">
-                  {hookedTrack.threatName ? `${hookedTrack.threatName.toUpperCase()} INBOUND. CLEARED TO ENGAGE.` :
-                   hookedTrack.category === 'UAS' ? 'QUAIL INBOUND. CLEARED TO ENGAGE.' : 
-                   hookedTrack.category === 'TBM' ? 'SCUD INBOUND. CLEARED TO ENGAGE.' : 
-                   'BANDIT INBOUND. CLEARED TO ENGAGE.'}
-                </div>
-              </div>
-            )}
-          </>
+          </div>
         ) : (
-          <div className="flex-1 flex flex-col p-2 space-y-6">
-            <div className="flex-1 flex flex-col items-center justify-center text-[#002B40] space-y-4">
-              <div className="text-4xl font-light opacity-50">[ ]</div>
-              <p className="text-xs tracking-widest">NO TRACK HOOKED</p>
+          <div className="p-3 space-y-4">
+            {/* Integrated System Doctrine (No nested boxes) */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => {
+                    const nextWcs = wcs === 'TIGHT' ? 'FREE' : 'TIGHT';
+                    setWcs(nextWcs);
+                    if (nextWcs === 'FREE') {
+                      setDoctrine({
+                        autoEngageTBM: true,
+                        autoEngageCM: true,
+                        autoEngageUAS: true,
+                        autoEngageRocket: true
+                      });
+                    }
+                  }}
+                  className={`w-full h-8 border text-[9px] font-bold tracking-widest transition-all flex items-center justify-center ${
+                    wcs === 'FREE' ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'bg-[#FFCC00] text-[#00050A] border-[#FFCC00]'
+                  }`}
+                >
+                  WCS: {wcs}
+                </button>
+                <button 
+                  onClick={() => {
+                    setDoctrine(prev => {
+                      const anyActive = Object.values(prev).some(v => v);
+                      return {
+                        autoEngageTBM: !anyActive,
+                        autoEngageCM: !anyActive,
+                        autoEngageUAS: !anyActive,
+                        autoEngageRocket: !anyActive
+                      };
+                    });
+                  }}
+                  className={`w-full h-8 border text-[9px] font-bold tracking-widest transition-all flex items-center justify-center ${
+                    Object.values(doctrine).some(v => v) ? 'bg-[#FFCC00] text-[#00050A] border-[#FFCC00]' : 'bg-[#001A26] border-[#004466] text-[#FFCC00] hover:bg-[#002B40]'
+                  }`}
+                >
+                  DOC: {Object.values(doctrine).some(v => v) ? 'AUTO' : 'MANUAL'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {[
+                  { key: 'autoEngageTBM', label: 'TBM', color: '#FF00FF', sub: 'THAAD/PAC' },
+                  { key: 'autoEngageCM', label: 'CM', color: '#00E5FF', sub: 'PAC/TAMIR' },
+                  { key: 'autoEngageRocket', label: 'ROCKET', color: '#FFFF00', sub: 'TAMIR' },
+                  { key: 'autoEngageUAS', label: 'UAS', color: '#00FF33', sub: 'TAMIR' }
+                ].map(item => {
+                  const isActive = doctrine[item.key as keyof EngagementDoctrine];
+                  return (
+                    <button 
+                      key={item.key}
+                      onClick={() => setDoctrine(prev => ({ ...prev, [item.key]: !prev[item.key as keyof EngagementDoctrine] }))}
+                      className={`w-full h-11 border text-[10px] font-bold tracking-widest transition-all flex flex-col items-center justify-center ${
+                        isActive 
+                          ? `bg-[${item.color}] text-[#00050A] border-[${item.color}] shadow-[0_0_10px_${item.color}44]` 
+                          : 'bg-[#001A26] border-[#004466] text-[#004466]'
+                      }`}
+                      style={isActive ? { backgroundColor: item.color, borderColor: item.color } : {}}
+                    >
+                      <span className={`text-[8px] mb-0.5 opacity-70 uppercase`}>{item.label}</span>
+                      {isActive ? 'AUTO' : 'HOLD'}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -823,7 +957,12 @@ export default function App() {
     { id: 'initial-4', time: getZuluTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
-  const [isAutoTamir, setIsAutoTamir] = useState(false);
+  const [doctrine, setDoctrine] = useState<EngagementDoctrine>({
+    autoEngageTBM: false,
+    autoEngageCM: false,
+    autoEngageUAS: false,
+    autoEngageRocket: false
+  });
   const [wcs, setWcs] = useState<'TIGHT' | 'FREE'>('TIGHT');
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
@@ -893,8 +1032,72 @@ export default function App() {
   useEffect(() => {
     if (!isGameStarted) return;
 
+    const reaperTimer = setInterval(() => {
+      if (nowStore.isPaused) return;
+      const now = nowStore.now;
+      const lastSweep = useTrackStore.getState().lastSweepTime;
+      const elapsed = (now - lastSweep) / 1000;
+
+      setTracks(current => {
+        let anyDestroyed = false;
+        let anyInterceptorsRemoved = false;
+        const destroyedIds = new Set<string>();
+        
+        const next = current.map(t => {
+          if (!t.interceptors || t.interceptors.length === 0) return t;
+
+          const remainingInterceptors = t.interceptors.filter(i => {
+            const splashTime = i.engagementTime + i.interceptDuration;
+            if (now >= splashTime) {
+              if (i.isPkHit && !destroyedIds.has(t.id)) {
+                destroyedIds.add(t.id);
+                anyDestroyed = true;
+
+                // Visual Splash at interpolated position
+                const rad = t.hdg * (Math.PI / 180);
+                const smoothX = t.x + Math.sin(rad) * ((t.spd / 3600) * elapsed);
+                const smoothY = t.y - Math.cos(rad) * ((t.spd / 3600) * elapsed);
+                
+                setTimeout(() => {
+                  const weaponStats = WEAPON_STATS[i.weapon as keyof typeof WEAPON_STATS];
+                  const costStr = weaponStats.cost >= 1000000 ? `${(weaponStats.cost / 1000000).toFixed(1)}M` : `${Math.round(weaponStats.cost / 1000)}K`;
+                  
+                  setSplashes(prev => [...prev, { id: `live-${t.id}-${Date.now()}`, x: smoothX, y: smoothY, time: Date.now() }]);
+                  addLog(`TRACK ${t.id} SPLASH (${i.shooterId}) [-$${costStr}].`, 'INFO');
+                }, 0);
+              } else if (i.isPkHit === false) {
+                // Visual Miss reporting
+                setTimeout(() => {
+                  addLog(`${i.shooterId} MISSED TRACK ${t.id} (INTERCEPTOR SELF-DESTRUCT).`, 'WARN');
+                }, 0);
+              }
+              anyInterceptorsRemoved = true;
+              return false; // Remove interceptor (it reached its destination)
+            }
+            return true;
+          });
+
+          if (remainingInterceptors.length !== t.interceptors.length) {
+            return { ...t, interceptors: remainingInterceptors };
+          }
+          return t;
+        });
+
+        if (anyDestroyed) {
+          return next.filter(t => !destroyedIds.has(t.id));
+        }
+        return anyInterceptorsRemoved ? next : current;
+      });
+    }, 100);
+
+    return () => clearInterval(reaperTimer);
+  }, [isGameStarted, addLog]);
+
+  useEffect(() => {
+    if (!isGameStarted) return;
+
     const clockTimer = setInterval(() => {
-      if (isPaused) return;
+      if (nowStore.isPaused) return;
       simTimeRef.current += 1;
 
       const hasHostiles = useTrackStore.getState().getAllTracks().some(t => t.type === 'HOSTILE' || t.type === 'SUSPECT' || (t.type === 'PENDING' && t.category !== 'FW'));
@@ -908,10 +1111,16 @@ export default function App() {
         setTracks(current => [...current, ...newTracks]);
         addLog(event.message, event.type);
 
-        // ROE Escalation: First TBM launch triggers WCS FREE
-        if (newTracks.some(t => t.category === 'TBM') && wcs === 'TIGHT') {
+        // ROE Escalation: First TBM launch triggers WCS FREE and enables auto-engagement
+        if (newTracks.some(t => t.category === 'TBM') && wcsRef.current === 'TIGHT') {
           setWcs('FREE');
-          addLog('WCS SET TO FREE. ALL HOSTILE TRACKS CLEARED FOR ENGAGEMENT.', 'ALERT');
+          setDoctrine({
+            autoEngageTBM: true,
+            autoEngageCM: true,
+            autoEngageUAS: true,
+            autoEngageRocket: true
+          });
+          addLog('WCS SET TO FREE. AUTO-ENGAGEMENT DOCTRINE ACTIVATED FOR ALL THREATS.', 'ALERT');
         }
 
         // Calculate enemy cost for this wave
@@ -926,70 +1135,40 @@ export default function App() {
     }, 1000);
 
     const sweepTimer = setInterval(() => {
-      if (isPaused) return;
-      const events: { type: 'LOG' | 'COST', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number }[] = [];
+      if (nowStore.isPaused) return;
+      const events: { type: 'LOG' | 'COST' | 'AMRAAM_FIRED' | 'IMPACT' | 'GROUND_IMPACT' | 'SPLASH', message?: string, logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION', amount?: number, assetId?: string, trackId?: string, x?: number, y?: number, isPopulated?: boolean }[] = [];
+
+      // Physical sim time anchor
+      const sweepSimTime = nowStore.now;
 
       setTracks(currentTracks => {
-        const currentSimTime = nowStore.now;
-        const actualElapsedSecs = Math.max(0.1, Math.min((currentSimTime - useTrackStore.getState().lastSweepTime) / 1000, 5.0)); // Cap to prevent large jumps
+        const lastSweep = useTrackStore.getState().lastSweepTime;
+        const actualElapsedSecs = Math.max(0.1, Math.min((sweepSimTime - lastSweep) / 1000, 5.0)); // Cap to prevent large jumps
         
         events.length = 0; // Clear events to prevent duplicates in React Strict Mode double-invocations
 
-        // 1. Progress intercepts and identify splashes/misses
+        // 1. Progress intercepts (Visual countdown only)
         let nextTracks = currentTracks.map(t => {
           if (t.interceptors && t.interceptors.length > 0) {
             const updatedInterceptors = t.interceptors.map(i => ({
               ...i,
               interceptTtl: Math.max(0, i.interceptTtl - actualElapsedSecs)
-            }));
+            })); 
+            
             return { ...t, interceptors: updatedInterceptors };
-          }
-          return t;
-        });
-
-        // Evaluate Impacts
-        const destroyedTrackIds = new Set<string>();
-
-                nextTracks.forEach(t => {
-                  if (!t.interceptors) return;
-        
-                  t.interceptors.forEach(interceptor => {
-                    if (interceptor.interceptTtl <= 0 && !destroyedTrackIds.has(t.id)) {
-                      // Stochastic Pk Check with absolute safety fallback to prevent crashes              const weaponKey = interceptor.weapon as keyof typeof WEAPON_STATS;
-              const stats = WEAPON_STATS[weaponKey];
-              const pkValue = stats?.pk ?? 0.8; // Extremely safe extraction
-              const roll = Math.random();
-              
-              if (roll <= pkValue) {
-                // Hit
-                events.push({ type: 'LOG', message: `TRACK ${t.id} SPLASH (${interceptor.shooterId}).`, logType: 'INFO' });
-                destroyedTrackIds.add(t.id);
-              } else {
-                // Miss
-                events.push({ type: 'LOG', message: `${interceptor.shooterId} MISSED TRACK ${t.id} (R: ${roll.toFixed(2)} > Pk: ${pkValue.toFixed(2)}).`, logType: 'WARN' });
-              }
-            }
-          });
-        });
-
-        // Remove splashed targets
-        nextTracks.forEach(t => {
-          if (destroyedTrackIds.has(t.id)) {
-            events.push({ type: 'SPLASH', x: t.x, y: t.y } as any);
-          }
-        });
-        nextTracks = nextTracks.filter(t => !destroyedTrackIds.has(t.id));
-
-        // Clean up completed interceptors (hits or misses) from surviving tracks
-        nextTracks = nextTracks.map(t => {
-          if (t.interceptors && t.interceptors.length > 0) {
-            return { ...t, interceptors: t.interceptors.filter(i => i.interceptTtl > 0) };
           }
           return t;
         });
 
         // 2. Standard movement and physics
         nextTracks = nextTracks.map(track => {
+          // IMPORTANT: Update position using PREVIOUS speed and heading to perfectly match the extrapolator's visual prediction
+          // This eliminates the 3-second 'jump' when a track accelerates or turns.
+          const initialSpeedFactor = (track.spd / 3600) * actualElapsedSecs;
+          const radOld = track.hdg * (Math.PI / 180);
+          let resX = track.x + Math.sin(radOld) * initialSpeedFactor;
+          let resY = track.y - Math.cos(radOld) * initialSpeedFactor;
+
           let newSpd = track.spd;
           let newAlt = track.alt;
           let newHdg = track.hdg;
@@ -1003,21 +1182,23 @@ export default function App() {
             if (track.isRTB) targetSpd = 600;
             else if (newTargetWaypoint) targetSpd = 1300; // Mach 2.0+ Intercept
 
-            // Smooth speed transition
-            if (newSpd < targetSpd) newSpd = Math.min(targetSpd, newSpd + 150);
-            else if (newSpd > targetSpd) newSpd = Math.max(targetSpd, newSpd - 100);
+            // Smooth speed transition (accel/decel normalized to seconds)
+            const accelRate = 50 * actualElapsedSecs;
+            const decelRate = 30 * actualElapsedSecs;
+            if (newSpd < targetSpd) newSpd = Math.min(targetSpd, newSpd + accelRate);
+            else if (newSpd > targetSpd) newSpd = Math.max(targetSpd, newSpd - decelRate);
 
-            // Scramble climb
-            if (track.alt < 50000) newAlt = Math.min(50000, track.alt + 1500);
+            // Scramble climb (Normalized to 30,000 ft/min)
+            if (track.alt < 50000) newAlt = Math.min(50000, track.alt + (500 * actualElapsedSecs));
 
-            // Fuel Consumption (3s tick)
-            // Approx burn: 40 lbs/tick at cruise (500kts), 150 lbs/tick at full afterburner (1300kts)
+            // Fuel Consumption (Normalized to actual time)
+            // Approx burn: 13 lbs/sec at cruise, 50 lbs/sec at burner
             if (newFuel !== undefined) {
-              const burnRate = newSpd > 600 ? 150 : 40;
-              newFuel = Math.max(0, newFuel - burnRate);
+              const burnRatePerSec = newSpd > 600 ? 50 : 13;
+              newFuel = Math.max(0, newFuel - (burnRatePerSec * actualElapsedSecs));
             }
 
-            // Maneuvering
+            // Maneuvering (Turn rate normalized to seconds)
             if (newTargetWaypoint) {
               const dx = newTargetWaypoint.x - track.x;
               const dy = newTargetWaypoint.y - track.y;
@@ -1029,7 +1210,8 @@ export default function App() {
                 let hdgDiff = desiredHdg - newHdg;
                 if (hdgDiff > 180) hdgDiff -= 360;
                 if (hdgDiff < -180) hdgDiff += 360;
-                const turnRate = Math.max(-30, Math.min(30, hdgDiff));
+                // Max turn rate: 10 degrees per second (Standard rate turn is 3 deg/sec, 10 is aggressive)
+                const turnRate = Math.max(-10 * actualElapsedSecs, Math.min(10 * actualElapsedSecs, hdgDiff));
                 newHdg = (newHdg + turnRate + 360) % 360;
               } else {
                 if (!track.isRTB) {
@@ -1037,11 +1219,11 @@ export default function App() {
                     events.push({ type: 'LOG', message: `${track.id}: On station.`, logType: 'INFO' });
                   }
                   newTargetWaypoint = null;
-                  newHdg = (newHdg + 10) % 360;
+                  newHdg = (newHdg + (3 * actualElapsedSecs)) % 360; // Slow loiter turn
                 }
               }
             } else {
-              newHdg = (newHdg + 10) % 360;
+              newHdg = (newHdg + (3 * actualElapsedSecs)) % 360; // Slow loiter turn
             }
           } else {
             // Dynamic Profiles for Non-Fighter Tracks
@@ -1053,7 +1235,9 @@ export default function App() {
               if (newSpd < 650) newSpd += 10; 
             } else if (track.category === 'TBM') {
               // Ballistic Profile: Exospheric cruise, then terminal hypersonic dive
-              const distToTarget2D = track.targetWaypoint ? calculateRange(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y) : calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+              const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
+              const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
+              const distToTarget2D = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0);
               
               if (distToTarget2D < 45) {
                 // Terminal phase: Altitude is locked to remaining distance to mathematically guarantee impact
@@ -1068,7 +1252,9 @@ export default function App() {
               newAlt = Math.max(50, 100 + (Math.random() * 40 - 20)); 
             } else if (track.category === 'ROCKET') {
               // Rocket Salvo: Ballistic arc scaling with distance
-              const distToTarget2D = track.targetWaypoint ? calculateRange(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y) : calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y);
+              const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
+              const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
+              const distToTarget2D = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0);
               newAlt = Math.max(0, Math.min(newAlt, (distToTarget2D / 40) * 30000));
             } else if (track.category === 'UAS') {
               // Drone Swarm: Slight altitude weave, and steer toward target asset
@@ -1095,105 +1281,198 @@ export default function App() {
             }
           }
 
-                    const speedFactor = (newSpd / 3600) * actualElapsedSecs;
-                    const rad = newHdg * (Math.PI / 180);
-                    let newX = track.x + Math.sin(rad) * speedFactor;
-                    let newY = track.y - Math.cos(rad) * speedFactor;
+                    const moveFactor = (newSpd / 3600) * actualElapsedSecs;
+                    const radNew = newHdg * (Math.PI / 180);
+                    // Note: We already calculated resX/resY based on pre-sweep velocity for visual continuity.
+                    // However, for certain physics checks (like reaching a waypoint), we might want to check the final projected pos.
           
                     // Prevent threats from flying past their target. Stop horizontal motion if they reached it.
-                    if (track.targetWaypoint && (track.category === 'TBM' || track.category === 'ROCKET' || track.category === 'CM' || track.category === 'UAS')) {
-                      const distToWaypoint = calculateRange(track.x, track.y, track.targetWaypoint.x, track.targetWaypoint.y, 0, 0); // 2D distance
-                      if (distToWaypoint <= speedFactor) {
-                        newX = track.targetWaypoint.x;
-                        newY = track.targetWaypoint.y;
+                    if (track.category === 'TBM' || track.category === 'ROCKET' || track.category === 'CM' || track.category === 'UAS') {
+                      const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
+                      const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
+                      const distToWaypoint = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0); // 2D distance
+                      if (distToWaypoint <= moveFactor) {
+                        resX = tgtX;
+                        resY = tgtY;
                         newSpd = 0; // Arrest horizontal speed, let it drop/detonate
                       }
                     }
           
-                    const isStealthy = track.category === 'UAS' || track.alt < 1000;          const rangeToBattery = calculateRange(newX, newY, BATTERY_POS.x, BATTERY_POS.y, newAlt, 0);
-          const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(newAlt));
-          const isDetected = track.sensor === 'L16' || rangeToBattery <= radarHorizonNm;
+                    const isStealthy = track.category === 'UAS' || track.alt < 500;
+                    const rangeToBattery = calculateRange(resX, resY, BATTERY_POS.x, BATTERY_POS.y, newAlt, 0);
+                    
+                    // Radar Horizon calculation (Standard NM formula)
+                    const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(newAlt));
+                    
+                    // Stealth targets have their effective radar cross section reduced, 
+                    // which in this simplified model means they must be closer to be detected.
+                    let detectionRange = radarHorizonNm;
+                    if (isStealthy) {
+                      detectionRange *= 0.45; // 55% reduction in detection range for stealth/low-alt
+                    }
+
+                    // Check if any active friendly fighter can see it (simulating datalink from fighter radar)
+                    let spottedByFighter = false;
+                    for (const f of currentTracks) {
+                      if (f.isFighter && !f.isRTB) {
+                        const distToFighter = calculateRange(resX, resY, f.x, f.y, newAlt, f.alt);
+                        // Fighter radar has ~40 NM range against typical targets, half that for stealth
+                        const fighterDetectRange = isStealthy ? 20 : 40;
+                        if (distToFighter <= fighterDetectRange) {
+                          spottedByFighter = true;
+                          break;
+                        }
+                      }
+                    }
+
+                    const isDetected = track.sensor === 'L16' || rangeToBattery <= detectionRange || spottedByFighter;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
-          return { ...track, x: newX, y: newY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint, fuel: newFuel };
+          return { ...track, x: resX, y: resY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint, fuel: newFuel };
         });
 
-        // 3. Fighter AI (VID, Targeting, and Auto-Engagement)
-        nextTracks = processFighters(nextTracks, events, currentSimTime);
+        // 3. ROE Processor (Auto-ID)
+        nextTracks = nextTracks.map(t => {
+          if (t.type === 'PENDING' || t.type === 'UNKNOWN') {
+            if (t.category === 'TBM' || t.category === 'ROCKET' || t.category === 'CM') {
+               return { ...t, type: 'HOSTILE', threatName: getThreatName(t.category) };
+            }
+            if (t.category === 'UAS') {
+              return { ...t, type: 'SUSPECT', threatName: 'UAS' };
+            }
+          }
+          // Escalate SUSPECT UAS to HOSTILE if they are within 15NM of any asset
+          if (t.type === 'SUSPECT' && t.category === 'UAS') {
+             for (const asset of DEFENDED_ASSETS) {
+               if (calculateRange(t.x, t.y, asset.x, asset.y) < 15) {
+                 return { ...t, type: 'HOSTILE' };
+               }
+             }
+          }
+          return t;
+        });
 
-                // 4. Cleanup and RTB
-                nextTracks = nextTracks.map(track => {
-                  if (track.isFighter && !track.isRTB) {
-                    if (track.missilesRemaining === 0) {
-                      events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
-                      return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
-                    }
-                    if (track.fuel !== undefined && track.maxFuel !== undefined && track.fuel < (track.maxFuel * 0.25)) {
-                      events.push({ type: 'LOG', message: `${track.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
-                      return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
-                    }
-                  }
-                  return track;
-                });
-        
-                // 4.5 Automatic TAMIR Point Defense (Weapons Free)
-                let currentTamir = inventoryRef.current.tamir;
-                let autoTamirShotsFiredThisSweep = 0;
-                
+        // 4. Fighter AI (VID, Targeting, and Auto-Engagement)
+        nextTracks = processFighters(nextTracks, events, sweepSimTime);
+
+        // 5. Cleanup and RTB
+        nextTracks = nextTracks.map(track => {
+          if (track.isFighter && !track.isRTB) {
+            if (track.missilesRemaining === 0) {
+              events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
+              return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
+            }
+            if (track.fuel !== undefined && track.maxFuel !== undefined && track.fuel < (track.maxFuel * 0.25)) {
+              events.push({ type: 'LOG', message: `${track.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
+              return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
+            }
+          }
+          return track;
+        });
+
+        // 6. Unified Auto-Engagement Doctrine (THAAD / PAC-3 / TAMIR)
+        const doc = doctrineRef.current;
+        const currentWcs = wcsRef.current;
+        let shotsFiredThisSweep = 0;
+
+        nextTracks = nextTracks.map(t => {
+          // Determine if this target is eligible for auto-engagement
+          const isHostile = t.type === 'HOSTILE';
+          const isSuspect = t.type === 'SUSPECT';
+          
+          // WCS FREE allows engagement of SUSPECTS. WCS TIGHT requires HOSTILE.
+          const isEngageable = isHostile || (currentWcs === 'FREE' && isSuspect);
+          if (!isEngageable) return t;
+
+          // Check if already being engaged by enough interceptors (conservation of fire)
+          const existingInterceptors = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
+          
+          let weaponToUse: 'THAAD' | 'PAC-3' | 'TAMIR' | null = null;
+          let maxSalvo = 1; // Default to single shot
+
+          if (t.category === 'TBM' && doc.autoEngageTBM) {
+            // Priority: THAAD for long-range, PAC-3 for close-range
+            const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0);
+            if (rng > 40 && rng <= 100 && inventoryRef.current.thaad > 0) {
+              weaponToUse = 'THAAD';
+              maxSalvo = 1; 
+            }
+            else if (rng <= 40 && inventoryRef.current.pac3 > 0) {
+              weaponToUse = 'PAC-3';
+              maxSalvo = 1;
+            }
+          } 
+          else if (t.category === 'CM' && doc.autoEngageCM) {
+            if (inventoryRef.current.pac3 > 0) {
+              weaponToUse = 'PAC-3';
+              maxSalvo = 1;
+            }
+            else if (inventoryRef.current.tamir > 0) {
+              weaponToUse = 'TAMIR';
+              maxSalvo = 2; // Double tap CMs with Tamir
+            }
+          }
+          else if (t.category === 'ROCKET' && doc.autoEngageRocket) {
+            if (inventoryRef.current.tamir > 0) {
+              weaponToUse = 'TAMIR';
+              maxSalvo = 2; // Double tap rockets
+            }
+          }
+          else if (t.category === 'UAS' && doc.autoEngageUAS) {
+            if (inventoryRef.current.tamir > 0) {
+              weaponToUse = 'TAMIR';
+              maxSalvo = 2; // Double tap drones
+            }
+          }
+
+          if (weaponToUse && existingInterceptors < maxSalvo) {
+            const stats = WEAPON_STATS[weaponToUse];
+            const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0);
+            
+            if (rng <= stats.range) {
+              const shooterId = 'BATTERY';
+              const missileSpdNmSec = stats.speedMach * MACH_TO_NM_SEC;
+              const closureRate = calculateClosureRate(BATTERY_POS, t, missileSpdNmSec);
+              
+              // Physical launch stagger
+              const shotDelayMs = (shotsFiredThisSweep * 250);
+              shotsFiredThisSweep++;
+
+              const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (shotDelayMs / 1000);
+              const isPkHit = Math.random() <= stats.pk;
+
+              const newInterceptor = {
+                id: `${weaponToUse}-AUTO-${sweepSimTime}-${Math.random()}`,
+                weapon: weaponToUse,
+                shooterId,
+                launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
+                engagementTime: sweepSimTime + shotDelayMs,
+                interceptDuration: interceptTimeSecs * 1000,
+                interceptTtl: Math.ceil(interceptTimeSecs),
+                initialRange: rng,
+                isPkHit
+              };
+
+              // Update inventory
+              const invKey = weaponToUse.toLowerCase().replace('-3', '3') as keyof typeof inventory;
+              inventoryRef.current[invKey]--;
+              
+              const costStr = stats.cost >= 1000000 ? `$${(stats.cost / 1000000).toFixed(1)}M` : `$${Math.round(stats.cost / 1000)}K`;
+              events.push({ type: 'LOG', message: `AUTO-ENGAGE TRK ${t.id} (${weaponToUse}) [${costStr}]`, logType: 'ACTION' });
+              events.push({ type: 'COST', amount: stats.cost });
+
+              return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+            }
+          }
+          return t;
+        });
+
+        // Sync inventory back to state
+        setInventory({ ...inventoryRef.current });
+
+        // 7. Terminal Point Defense (C-RAM / Laser CIWS)
                 nextTracks = nextTracks.map(t => {
-                  if (isAutoTamirRef.current && t.type === 'HOSTILE' && (t.category === 'UAS' || t.category === 'ROCKET') && t.alt <= 30000 && currentTamir > 0) {
-                    const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0);
-                    // Check if within 35NM TAMIR (Iron Dome) WEZ and not already being shot at by Battery
-                    const existingBatteryMissiles = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
-                    
-                    // Auto-TAMIR employs double-tap doctrine to guarantee kill on close-in leakers
-                    const requiredMissiles = 2;
-
-                    if (rng <= 35.0 && existingBatteryMissiles < requiredMissiles) {
-                      const shotsToTake = Math.min(requiredMissiles - existingBatteryMissiles, currentTamir);
-                      
-                      let newInterceptors = [];
-                      for (let i = 0; i < shotsToTake; i++) {
-                        currentTamir--;
-                        
-                        incrementInterceptorsFired('TAMIR');
-                        
-                        const costStr = WEAPON_STATS['TAMIR'].cost >= 1000000 ? `$${(WEAPON_STATS['TAMIR'].cost / 1000000).toFixed(1)}M` : `$${Math.round(WEAPON_STATS['TAMIR'].cost / 1000)}K`;
-                        events.push({ type: 'LOG', message: `TAMIR AUTO-ENGAGE TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
-                        events.push({ type: 'COST', amount: WEAPON_STATS['TAMIR'].cost });
-                        
-                        const closureRate = calculateClosureRate(BATTERY_POS, t, WEAPON_STATS['TAMIR'].speedMach);
-                        
-                        // Ripple fire cadence: 300ms per shot across the entire sweep
-                        const shotDelayMs = (autoTamirShotsFiredThisSweep * 300);
-                        autoTamirShotsFiredThisSweep++;
-                        
-                        const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (shotDelayMs / 1000); 
-                        
-                        newInterceptors.push({
-                          id: `TAMIR-AUTO-${currentSimTime}-${Math.random()}`,
-                          weapon: 'TAMIR' as const,
-                          shooterId: 'BATTERY',
-                          launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
-                          engagementTime: currentSimTime + shotDelayMs, // Physical launch stagger
-                          interceptDuration: interceptTimeSecs * 1000,
-                          interceptTtl: Math.ceil(interceptTimeSecs)
-                        });
-                      }
-                      
-                      return { ...t, interceptors: [...(t.interceptors || []), ...newInterceptors] };
-                    }
-                  }
-                  return t;
-                });
-                
-                if (currentTamir !== inventoryRef.current.tamir) {
-                   setInventory(prev => ({ ...prev, tamir: currentTamir }));
-                }
-
-                // 4.6 Terminal Point Defense (C-RAM / Laser CIWS)
-                nextTracks = nextTracks.map(t => {
-                  if (t.type === 'HOSTILE' && t.category !== 'TBM' && (!t.interceptors || !t.interceptors.some(i => i.shooterId === 'CIWS'))) {
+                  if (t.type === 'HOSTILE' && t.category !== 'TBM' && (!t.interceptors || !t.interceptors.some(i => i.shooterId.startsWith('C-RAM')))) {
                     // Check if track is threatening ANY defended asset that has C-RAM equipped
                     for (const asset of DEFENDED_ASSETS) {
                       if (!asset.hasCram) continue;
@@ -1202,20 +1481,24 @@ export default function App() {
                       if (rngToAsset <= 2.5) {
                         incrementInterceptorsFired('C-RAM');
                         const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
-                        events.push({ type: 'LOG', message: `CIWS (${asset.id}) ENGAGING LEAKER TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
+                        events.push({ type: 'LOG', message: `C-RAM (${asset.id}) ENGAGING LEAKER TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
                         events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
                         
-                        const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, t, WEAPON_STATS['C-RAM'].speedMach);
+                        const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, t, WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC);
                         const interceptTimeSecs = rngToAsset / Math.max(0.1, closureRate);
                         
+                        // Pre-calculate Pk
+                        const isPkHit = Math.random() <= WEAPON_STATS['C-RAM'].pk;
+
                         const newInterceptor = {
-                          id: `CIWS-${currentSimTime}-${Math.random()}`,
+                          id: `CRAM-${sweepSimTime}-${Math.random()}`,
                           weapon: 'C-RAM' as const,
-                          shooterId: 'CIWS',
+                          shooterId: `C-RAM (${asset.id})`,
                           launchPos: { x: asset.x, y: asset.y }, // Launch from the asset, not the battery
-                          engagementTime: currentSimTime,
+                          engagementTime: sweepSimTime,
                           interceptDuration: interceptTimeSecs * 1000,
-                          interceptTtl: Math.ceil(interceptTimeSecs)
+                          interceptTtl: Math.ceil(interceptTimeSecs),
+                          isPkHit
                         };
                         return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
                       }
@@ -1250,18 +1533,26 @@ export default function App() {
                                 
                                                     // If it reached the ground (or is a CM that reached its target waypoint) and didn't hit a specific asset
                                                     if (!hitAsset) {
+                                                      const tgtX = t.targetWaypoint ? t.targetWaypoint.x : BATTERY_POS.x;
+                                                      const tgtY = t.targetWaypoint ? t.targetWaypoint.y : BATTERY_POS.y;
+                                                      
                                                       const isBallisticGroundHit = (t.category === 'TBM' || t.category === 'ROCKET') && t.alt <= 100;
-                                                      const isSteeredGroundHit = (t.category === 'CM' || t.category === 'UAS') && t.targetWaypoint && calculateRange(t.x, t.y, t.targetWaypoint.x, t.targetWaypoint.y) < 1.0;
+                                                      const isSteeredGroundHit = (t.category === 'CM' || t.category === 'UAS') && calculateRange(t.x, t.y, tgtX, tgtY) < 1.0;
                                                       
                                                       if (isBallisticGroundHit || isSteeredGroundHit) {
-                                                        impactedTracks.push({ trackId: t.id, assetId: null, damage: 0, x: t.x, y: t.y });
+                                                        let damage = 10; // Default UAS
+                                                        if (t.category === 'TBM') damage = 100;
+                                                        if (t.category === 'CM') damage = 50;
+                                                        if (t.category === 'ROCKET') damage = 20;
+
+                                                        impactedTracks.push({ trackId: t.id, assetId: null, damage, x: t.x, y: t.y });
                                                         
                                                         // Mathematically check if it fell within the green "Defended Metro Area" polygon
                                                         // The center of that polygon is roughly x: 51, y: 54. We'll use a 12 NM radius for the metro area.
                                                         const distToMetroCenter = calculateRange(t.x, t.y, 51, 54);
                                                         const isPopulated = distToMetroCenter <= 12;
 
-                                                        events.push({ type: 'GROUND_IMPACT', trackId: t.id, x: t.x, y: t.y, isPopulated } as any);
+                                                        events.push({ type: 'GROUND_IMPACT', trackId: t.id, damage, x: t.x, y: t.y, isPopulated } as any);
                                                       }
                                                     }
                                                   }
@@ -1271,15 +1562,14 @@ export default function App() {
                                 return nextTracks.filter(t =>
                                   !impactedTrackIds.has(t.id) &&                  !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 57.5, 62.5) < 2) &&
                   t.x >= -100 && t.x <= 200 && t.y >= -100 && t.y <= 200
-                );      }, nowStore.now);
+                );      }, sweepSimTime);
 
       events.forEach(e => {
         if (e.type === 'LOG') addLog(e.message!, e.logType);
         if (e.type === 'COST') addDefenseCost(e.amount!);
         if (e.type === 'AMRAAM_FIRED') incrementInterceptorsFired('AMRAAM');
         if (e.type === 'IMPACT') {
-          const { assetId, damage, trackId, x, y } = e as any;
-          const { currentIntegrity, destroyed } = useTrackStore.getState().applyDamage(assetId, damage);
+          const { assetId, trackId, x, y } = e as any;
           const asset = useTrackStore.getState().assets[assetId];
           
           addLeaker();
@@ -1287,12 +1577,7 @@ export default function App() {
           // Generate a ground splash
           setSplashes(prev => [...prev, { id: `impact-${Date.now()}-${Math.random()}`, x, y, time: Date.now() }]);
           
-          if (destroyed) {
-            addLog(`!!! CRITICAL: ${asset.name} DESTROYED BY ${trackId} !!!`, 'ALERT');
-          } else {
-            const pct = Math.round((currentIntegrity / asset.maxIntegrity) * 100);
-            addLog(`IMPACT: ${asset.name} STRUCK BY ${trackId}. INTEGRITY AT ${pct}%.`, 'ALERT');
-          }
+          addLog(`IMPACT: ${asset.name} STRUCK BY ${trackId}.`, 'ALERT');
         }
         if ((e as any).type === 'SPLASH') {
           // Mid-air intercept splash
@@ -1301,7 +1586,7 @@ export default function App() {
         if ((e as any).type === 'GROUND_IMPACT') {
           const { x, y, trackId, isPopulated } = e as any;
           if (isPopulated) {
-            addLog(`WARNING: ${trackId} IMPACTED WITHIN METROPOLITAN AREA. CIVILIAN CASUALTIES LIKELY.`, 'ALERT');
+            addLog(`WARNING: ${trackId} IMPACTED WITHIN METROPOLITAN AREA.`, 'ALERT');
             // We'll also count this as a leaker for the final score, since the goal is to protect the city
             addLeaker();
           } else {
@@ -1316,7 +1601,7 @@ export default function App() {
             clearInterval(clockTimer);
             clearInterval(sweepTimer);
           };
-        }, [addLog, isGameStarted, wcs, isPaused]);
+        }, [addLog, isGameStarted]);
       
         // --- INTERACTION HELPERS ---
 
@@ -1472,10 +1757,11 @@ export default function App() {
 
   // --- TACTICAL ACTIONS ---
 
-  const handleInterrogate = useCallback(() => {
-    if (hookedTrackIds.length === 0) return;
+  const handleInterrogate = useCallback((targetIds?: string[]) => {
+    const idsToInterrogate = targetIds || hookedTrackIds;
+    if (idsToInterrogate.length === 0) return;
     
-    hookedTrackIds.forEach((id, index) => {
+    idsToInterrogate.forEach((id, index) => {
       const track = useTrackStore.getState().getTrack(id);
       if (!track || track.isInterrogating || track.type === 'FRIEND' || track.type === 'ASSUMED_FRIEND') return;
 
@@ -1542,19 +1828,24 @@ export default function App() {
     addLog(`GROUP DECLARE: ${hookedTrackIds.length} TRACKS SET TO ${newType}`, newType === 'HOSTILE' ? 'ALERT' : 'WARN');
   }, [hookedTrackIds]);
 
-    const handleEngage = useCallback((weapon: 'PAC-3' | 'TAMIR' | 'THAAD') => {
-      if (hookedTrackIds.length === 0) return;
+    const handleEngage = useCallback((weapon: 'PAC-3' | 'TAMIR' | 'THAAD', targetIds?: string[]) => {
+      const idsToEngage = targetIds || hookedTrackIds;
+      if (idsToEngage.length === 0) return;
   
       const stats = WEAPON_STATS[weapon];
       let currentPac3 = inventory.pac3;
       let currentTamir = inventory.tamir;
       let currentThaad = inventory.thaad;
   
-      hookedTrackIds.forEach((id, index) => {
+      idsToEngage.forEach((id, index) => {
         const target = useTrackStore.getState().getTrack(id);
-        if (!target || target.type !== 'HOSTILE') return;
+        if (!target) return;
   
         // Kinematic limitations
+        if (target.type !== 'HOSTILE') {
+          addLog(`WARNING: ENGAGING NON-HOSTILE TRACK ${target.id} (${target.type})`, 'ALERT');
+        }
+
         if (weapon === 'TAMIR') {
           if (target.category === 'TBM') {
             addLog(`TAMIR CANNOT ENGAGE TBM (OUT OF ENVELOPE)`, 'WARN');
@@ -1605,7 +1896,7 @@ export default function App() {
                     addDefenseCost(stats.cost * shotsToTake);
                     addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon} (-${costStr})`, 'ACTION');
         
-        const missileSpdNmSec = weapon === "THAAD" ? 1.5 : (weapon === "PAC-3" ? 0.7 : 0.5); // Mach 8 vs Mach 4 vs Mach 3
+        const missileSpdNmSec = stats.speedMach * MACH_TO_NM_SEC;
         const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
         
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
@@ -1614,6 +1905,10 @@ export default function App() {
         setTracks(current => current.map(t => {
           if (t.id === id) {
              const interceptTimeSecs = (rng / Math.max(0.1, closureRate));
+             
+             // Pre-calculate Pk for live destruction
+             const isPkHit = Math.random() <= stats.pk;
+
              const newInterceptor = {
                id: `${weapon}-${currentSimTime}-${Math.random()}`,
                weapon,
@@ -1621,7 +1916,9 @@ export default function App() {
                launchPos,
                engagementTime: currentSimTime,
                interceptDuration: interceptTimeSecs * 1000,
-               interceptTtl: Math.ceil(interceptTimeSecs)
+               interceptTtl: Math.ceil(interceptTimeSecs),
+               initialRange: rng,
+               isPkHit
              };
             return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
           }
@@ -1637,16 +1934,18 @@ export default function App() {
 
   const unackAlertsRef = useRef(unackAlerts);
   const inventoryRef = useRef(inventory);
-  const isAutoTamirRef = useRef(isAutoTamir);
+  const doctrineRef = useRef(doctrine);
+  const wcsRef = useRef(wcs);
   const assets = useTrackStore(state => state.assets);
   const assetsRef = useRef(assets);
 
   useEffect(() => {
     unackAlertsRef.current = unackAlerts;
     inventoryRef.current = inventory;
-    isAutoTamirRef.current = isAutoTamir;
+    doctrineRef.current = doctrine;
+    wcsRef.current = wcs;
     assetsRef.current = assets;
-  }, [unackAlerts, inventory, isAutoTamir, assets]);
+  }, [unackAlerts, inventory, doctrine, wcs, assets]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1676,8 +1975,8 @@ export default function App() {
           break;
         case '3':
           if (hookedTrackIds.length > 0) trigger('3', () => {
-            const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
-            handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
+            const anyNonHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type !== 'HOSTILE');
+            handleDeclare(anyNonHostile ? 'HOSTILE' : 'SUSPECT');
           });
           break;
         case '4':
@@ -1693,7 +1992,15 @@ export default function App() {
           if (unackAlertsRef.current.length > 0) trigger('7', () => setLogs(currentLogs => currentLogs.map(l => ({ ...l, acknowledged: true }))));
           break;
         case '8':
-          trigger('8', () => setIsAutoTamir(p => !p));
+          trigger('8', () => setDoctrine(prev => {
+            const anyActive = Object.values(prev).some(v => v);
+            return {
+              autoEngageTBM: !anyActive,
+              autoEngageCM: !anyActive,
+              autoEngageUAS: !anyActive,
+              autoEngageRocket: !anyActive
+            };
+          }));
           break;
       }
     };
@@ -1757,7 +2064,7 @@ export default function App() {
           {/* Render Splashes */}
           {splashes.map(s => (
             <g key={s.id} transform={`translate(${s.x}, ${s.y})`}>
-              <circle r={2 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" />
+              <circle r={2 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" style={{ animationIterationCount: 1, animationFillMode: 'forwards' }} />
               <line x1={-1 / camera.zoom} y1={-1 / camera.zoom} x2={1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
               <line x1={1 / camera.zoom} y1={-1 / camera.zoom} x2={-1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
             </g>
@@ -1837,10 +2144,10 @@ export default function App() {
               {/* RIGHT DRAGGABLE WINDOW */}
               <DraggableWindow 
                 title="TOTE & DOCTRINE" 
-                defaultPos={{ x: window.innerWidth ? window.innerWidth - 316 : 1000, y: 16 }} 
-                className="w-[300px] max-h-[calc(100vh-160px)]"
+                defaultPos={{ x: window.innerWidth ? window.innerWidth - 276 : 1000, y: 16 }} 
+                className="w-[260px] max-h-[calc(100vh-160px)]"
               >
-                <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} isAutoTamir={isAutoTamir} setIsAutoTamir={setIsAutoTamir} filters={filters} setFilters={setFilters} />
+                <Tote hookedTrackIds={hookedTrackIds} masterWarning={masterWarning} vectoringTrackId={vectoringTrackId} setVectoringTrackId={setVectoringTrackId} doctrine={doctrine} setDoctrine={setDoctrine} filters={filters} setFilters={setFilters} wcs={wcs} setWcs={setWcs} />
               </DraggableWindow>
               
             </main>
@@ -1880,13 +2187,28 @@ export default function App() {
           disabled={hookedTrackIds.length === 0}
           onClick={() => {
             triggerKeyFeedback('3', 'action');
-            const anyHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE');
-            handleDeclare(anyHostile ? 'SUSPECT' : 'HOSTILE');
+            const anyNonHostile = useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type !== 'HOSTILE');
+            handleDeclare(anyNonHostile ? 'HOSTILE' : 'SUSPECT');
           }}
           title="Declare the selected track as HOSTILE (Cleared to Engage) or downgrade to SUSPECT"
         >
           <span className="text-[8px] text-[#004466] mb-0.5">3</span>
-          {useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type === 'HOSTILE') ? 'DOWNGRADE' : 'DECL HOSTILE'}
+          {useTrackStore.getState().getAllTracks().some(t => hookedTrackIds.includes(t.id) && t.type !== 'HOSTILE') ? 'DECL HOSTILE' : 'DOWNGRADE'}
+        </button>
+
+        <div className="w-px h-8 bg-[#002B40] mx-1 lg:mx-2 shrink-0" />
+
+        <button 
+          className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all flex flex-col items-center justify-center whitespace-nowrap bg-[#001A26] border-[#004466]`}
+          onClick={() => {
+            const pendingIds = useTrackStore.getState().getAllTracks().filter(t => (t.type === 'PENDING' || t.type === 'UNKNOWN') && t.detected).map(t => t.id);
+            if (pendingIds.length > 0) {
+              handleInterrogate(pendingIds);
+            }
+          }}
+          title="Interrogate all currently detected UNKNOWN/PENDING tracks"
+        >
+          IFF ALL
         </button>
 
         <button 
@@ -1935,19 +2257,6 @@ export default function App() {
         >
           <span className={`text-[8px] mb-0.5 ${unackAlerts.length > 0 ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>7</span>
           ACK ALERTS
-        </button>
-
-        <button 
-          className={`h-10 px-2 lg:px-4 border text-[10px] lg:text-xs font-bold tracking-widest transition-all flex flex-col items-center justify-center whitespace-nowrap shrink-0 ${
-            isAutoTamir 
-              ? (buttonFeedback['8'] === 'action' ? 'bg-[#FF3366] border-[#FF0033] text-[#00050A] brightness-150 scale-[0.98]' : 'bg-[#FF0033] border-[#FF0033] text-[#00050A] hover:bg-[#CC0022]')
-              : 'bg-[#001A26] border-[#004466] text-[#00E5FF] hover:bg-[#002B40]'
-          }`}
-          onClick={() => { triggerKeyFeedback('8', 'action'); setIsAutoTamir(p => !p); }}
-          title="Toggle Iron Dome (TAMIR) point defense automation"
-        >
-          <span className={`text-[8px] mb-0.5 ${isAutoTamir ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>8</span>
-          IRON DOME: {isAutoTamir ? 'AUTO' : 'HOLD'}
         </button>
       </footer>
 

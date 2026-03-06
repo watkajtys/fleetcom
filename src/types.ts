@@ -9,6 +9,8 @@ export interface Interceptor {
   engagementTime: number;
   interceptDuration: number;
   interceptTtl: number;
+  initialRange?: number; // Distance at time of launch
+  isPkHit?: boolean;
 }
 
 export interface DefendedAsset {
@@ -18,9 +20,6 @@ export interface DefendedAsset {
   y: number;
   type: 'AIRBASE' | 'PORT' | 'INFRA';
   hasCram: boolean;
-  maxIntegrity: number;
-  integrity: number;
-  isDestroyed: boolean;
 }
 
 export interface Track {
@@ -58,4 +57,11 @@ export interface SystemLog {
   message: string;
   type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION';
   acknowledged: boolean;
+}
+
+export interface EngagementDoctrine {
+  autoEngageTBM: boolean;
+  autoEngageCM: boolean;
+  autoEngageUAS: boolean;
+  autoEngageRocket: boolean;
 }

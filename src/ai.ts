@@ -1,14 +1,19 @@
 import { Track, TrackCategory } from './types';
-import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint } from './utils';
+import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint, MACH_TO_NM_SEC } from './utils';
 
 // We need to know where the battery/assets are to determine if a low-value target is a threat
-import { BATTERY_POS } from './constants';
+import { BATTERY_POS, WEAPON_STATS } from './constants';
 
 export interface AIEvent {
-  type: 'LOG' | 'COST' | 'AMRAAM_FIRED';
+  type: 'LOG' | 'COST' | 'AMRAAM_FIRED' | 'IMPACT' | 'GROUND_IMPACT' | 'SPLASH';
   message?: string;
   logType?: 'INFO' | 'WARN' | 'ALERT' | 'ACTION';
   amount?: number;
+  assetId?: string;
+  trackId?: string;
+  x?: number;
+  y?: number;
+  isPopulated?: boolean;
 }
 
 class SpatialGrid {
@@ -119,9 +124,9 @@ export const processFighters = (
       if (range > MAX_DETECT_RANGE) continue;
 
       // Conservation of Fires (Cost-Awareness)
-      // Drones are cheap. Don't waste a $1.2M AMRAAM unless it's within 20NM of the Battery.
+      // Drones are cheap. Don't waste a $1.2M AMRAAM unless it's getting too close to the Battery.
       let isHighValue = hostile.category !== 'UAS';
-      let isImmediateThreat = calculateRange(hostile.x, hostile.y, BATTERY_POS.x, BATTERY_POS.y, hostile.alt, 0) < 20;
+      let isImmediateThreat = calculateRange(hostile.x, hostile.y, BATTERY_POS.x, BATTERY_POS.y, hostile.alt, 0) < 30;
 
       if (!isHighValue && !isImmediateThreat) {
         // Skip this target. It's too cheap and too far away. Let the SHORAD deal with it later.
@@ -151,7 +156,7 @@ export const processFighters = (
         const targetId = bestTarget.id;
         const fighterId = track.id;
         
-        const missileSpdNmSec = 1.0; // Mach 4.5 AMRAAM
+        const missileSpdNmSec = WEAPON_STATS['AMRAAM'].speedMach * MACH_TO_NM_SEC;
         const closureRate = calculateClosureRate({x: track.x, y: track.y}, bestTarget, missileSpdNmSec);
         const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
         const interceptTimeMs = interceptTimeSecs * 1000;
@@ -160,8 +165,10 @@ export const processFighters = (
         events.push({ type: 'COST', amount: 1200000 });
         events.push({ type: 'AMRAAM_FIRED' });
 
-        // Note: The actual interceptor injection happens in App.tsx to avoid mutating state deeply here,
-        // but for now we'll mutate the incoming array as it's a draft array in the sweepTimer.
+        // Pre-calculate Pk for live destruction
+        const pkValue = WEAPON_STATS['AMRAAM'].pk;
+        const isPkHit = Math.random() <= pkValue;
+
         const targetInNext = trackMap.get(targetId); // O(1) lookup
         if (targetInNext) {
           targetInNext.interceptors = targetInNext.interceptors || [];
@@ -172,7 +179,8 @@ export const processFighters = (
             launchPos: { x: track.x, y: track.y },
             engagementTime: now,
             interceptDuration: interceptTimeMs,
-            interceptTtl: Math.ceil(interceptTimeSecs)
+            interceptTtl: Math.ceil(interceptTimeSecs),
+            isPkHit
           });
         }
         

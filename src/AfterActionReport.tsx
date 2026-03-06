@@ -5,12 +5,10 @@ import { useTrackStore } from './store';
 const AfterActionReport = () => {
   const interceptorsFired = useTrackStore(state => state.interceptorsFired);
   const leakerCount = useTrackStore(state => state.leakerCount);
-  const destroyedAssetIds = useTrackStore(state => state.destroyedAssetIds);
   const defenseCost = useTrackStore(state => state.defenseCost);
   const enemyCost = useTrackStore(state => state.enemyCost);
 
-  const protectedAssets = DEFENDED_ASSETS.filter(a => !destroyedAssetIds.includes(a.id));
-  const survivalRate = (protectedAssets.length / DEFENDED_ASSETS.length) * 100;
+  const survivalRate = leakerCount === 0 ? 100 : Math.max(0, 100 - (leakerCount * 15));
 
   const totalFired = Object.values(interceptorsFired).reduce((a, b) => a + b, 0);
 
@@ -37,15 +35,29 @@ const AfterActionReport = () => {
               <h3 className="text-[#00FFFF] font-bold border-b border-[#004466] mb-3 pb-1 text-xs tracking-tighter uppercase">Defensive Performance</h3>
               <div className="space-y-4">
                 <div className="flex justify-between items-end">
-                  <span className="text-xs opacity-70 uppercase text-[#004466]">Assets Protected</span>
-                  <span className="text-2xl font-bold">{protectedAssets.length} / {DEFENDED_ASSETS.length}</span>
+                  <span className="text-xs opacity-70 uppercase text-[#004466]">Defense Rating</span>
+                  <span className="text-2xl font-bold">{survivalRate}%</span>
                 </div>
                 <div className="w-full bg-[#00050A] h-2 rounded-full overflow-hidden">
                   <div className="h-full bg-[#00FF33] transition-all duration-1000" style={{ width: `${survivalRate}%` }} />
                 </div>
+                
                 <div className="flex justify-between items-center text-xs">
                   <span className="opacity-70">Total Leakers Impacted</span>
                   <span className={leakerCount > 0 ? 'text-[#FF0033] font-bold' : 'text-[#00FF33]'}>{leakerCount}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs border-t border-[#004466]/30 pt-3 mt-3">
+                  <span className="opacity-70">Magazine Depletion</span>
+                  {(() => {
+                    const primaryFired = (interceptorsFired['TAMIR'] || 0) + (interceptorsFired['PAC-3'] || 0) + (interceptorsFired['THAAD'] || 0);
+                    const depletionRate = Math.min(100, Math.round((primaryFired / 160) * 100));
+                    return (
+                      <span className={`font-bold ${depletionRate > 80 ? 'text-[#FF0033]' : depletionRate > 50 ? 'text-[#FFCC00]' : 'text-[#00FF33]'}`}>
+                        {depletionRate}% ({primaryFired}/160)
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             </section>

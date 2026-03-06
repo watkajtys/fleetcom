@@ -104,8 +104,21 @@ export const MISSION_STEPS: MissionEvent[] = [
     time: 20,
     message: 'HUNTRESS: ACTIVE AIR DEFENSE SCRAMBLE FOR FALCON 21, 22. SCRAMBLE IMMEDIATELY. VECTOR 320 TO INTERCEPT TRACK FLT-EK404.',
     type: 'ACTION',
+    generateTracks: () => []
+  },
+  {
+    time: 25,
+    message: 'FALCON 21: AIRBORNE.',
+    type: 'INFO',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 290, 250, 1000), id: 'FALCON-21', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 35, y: 35} },
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 290, 250, 1000), id: 'FALCON-21', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 35, y: 35} }
+    ]
+  },
+  {
+    time: 28,
+    message: 'FALCON 22: AIRBORNE.',
+    type: 'INFO',
+    generateTracks: () => [
       { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 300, 250, 1000), id: 'FALCON-22', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 40, y: 35} }
     ]
   },
@@ -127,8 +140,8 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'HUNTRESS: MULTI-DOMAIN ATTACK DETECTED. UAS SWARM INTERMIXED WITH SEA-SKIMMING CRUISE MISSILES INBOUND FROM THE GULF.',
     type: 'ALERT',
     generateTracks: () => [
-      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'UAS', 315 + Math.random() * 20, 60 + Math.random() * 10, 150 + Math.random() * 20, 1500 + Math.random() * 500, 'LCL')),
-      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'CM', 320 + Math.random() * 10, 65 + Math.random() * 5, 500 + Math.random() * 30, 100 + Math.random() * 50, 'LCL'))
+      ...Array.from({length: 6}).map(() => createTargetTrack('PENDING', 'UAS', 315 + Math.random() * 20, 60 + Math.random() * 10, 150 + Math.random() * 20, 1500 + Math.random() * 500, 'L16')),
+      ...Array.from({length: 2}).map(() => createTargetTrack('PENDING', 'CM', 320 + Math.random() * 10, 65 + Math.random() * 5, 500 + Math.random() * 30, 100 + Math.random() * 50, 'L16'))
     ]
   },
   {
@@ -149,8 +162,8 @@ export const MISSION_STEPS: MissionEvent[] = [
     message: 'SYS: MULTIPLE UNCORRELATED LOW-ALTITUDE CONTACTS DETECTED CLEARING HAJAR MOUNTAIN RANGE.',
     type: 'WARN',
     generateTracks: () => [
-        ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'CM', 100 + Math.random() * 20, 35 + Math.random() * 5, 500 + Math.random() * 30, 200, 'LCL')),
-        ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'UAS', 90 + Math.random() * 30, 40 + Math.random() * 10, 150, 1000, 'LCL'))
+        ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'CM', 100 + Math.random() * 20, 35 + Math.random() * 5, 500 + Math.random() * 30, 200, 'L16')),
+        ...Array.from({length: 4}).map(() => createTargetTrack('PENDING', 'UAS', 90 + Math.random() * 30, 40 + Math.random() * 10, 150, 1000, 'L16'))
     ]
   },
   {
@@ -163,8 +176,21 @@ export const MISSION_STEPS: MissionEvent[] = [
     time: 140,
     message: 'HUNTRESS: FALCON 23, 24. THIS IS AN ACTIVE AIR DEFENSE SCRAMBLE. SCRAMBLE IMMEDIATELY. VECTOR 090 TO HAJAR MOUNTAINS. YOU ARE FREE SUPERSONIC.',
     type: 'ALERT',
+    generateTracks: () => []
+  },
+  {
+    time: 145,
+    message: 'FALCON 23: AIRBORNE.',
+    type: 'INFO',
     generateTracks: () => [
-      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 90, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 85, y: 65} },
+      { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 90, 250, 1000), id: 'FALCON-23', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 85, y: 65} }
+    ]
+  },
+  {
+    time: 148,
+    message: 'FALCON 24: AIRBORNE.',
+    type: 'INFO',
+    generateTracks: () => [
       { ...createCrossingTrack('FRIEND', 'FW', 57.5, 62.5, 100, 250, 1000), id: 'FALCON-24', isFighter: true, missilesRemaining: 4, fuel: 24000, maxFuel: 24000, targetWaypoint: {x: 90, y: 65} }
     ]
   },

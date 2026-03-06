@@ -11,7 +11,6 @@ interface TrackStore {
   // Stats
   interceptorsFired: Record<string, number>;
   leakerCount: number;
-  destroyedAssetIds: string[];
   defenseCost: number;
   enemyCost: number;
   
@@ -21,9 +20,6 @@ interface TrackStore {
   updateTrack: (id: string, updater: (track: Track) => Partial<Track>) => void;
   getTrack: (id: string) => Track | undefined;
   getAllTracks: () => Track[];
-  
-  // Asset Actions
-  applyDamage: (assetId: string, amount: number) => { currentIntegrity: number, destroyed: boolean };
   
   // Stat Actions
   incrementInterceptorsFired: (type: string, amount?: number) => void;
@@ -53,7 +49,6 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     
     interceptorsFired: { 'PAC-3': 0, 'TAMIR': 0, 'THAAD': 0, 'AMRAAM': 0, 'C-RAM': 0 },
     leakerCount: 0,
-    destroyedAssetIds: [],
     defenseCost: 0,
     enemyCost: 0,
 
@@ -111,38 +106,6 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     getAllTracks: () => {
       const state = get();
       return state.trackIds.map(id => state.tracks[id]);
-    },
-
-    applyDamage: (assetId, amount) => {
-      let currentIntegrity = 0;
-      let destroyed = false;
-
-      set(state => {
-        const asset = state.assets[assetId];
-        if (!asset) return state;
-
-        const newIntegrity = Math.max(0, asset.integrity - amount);
-        const newlyDestroyed = newIntegrity <= 0 && !asset.isDestroyed;
-        
-        currentIntegrity = newIntegrity;
-        destroyed = newlyDestroyed;
-
-        return {
-          assets: {
-            ...state.assets,
-            [assetId]: { 
-              ...asset, 
-              integrity: newIntegrity, 
-              isDestroyed: asset.isDestroyed || newlyDestroyed 
-            }
-          },
-          destroyedAssetIds: newlyDestroyed 
-            ? [...state.destroyedAssetIds, assetId] 
-            : state.destroyedAssetIds
-        };
-      });
-
-      return { currentIntegrity, destroyed };
     },
 
     incrementInterceptorsFired: (type, amount = 1) => {
