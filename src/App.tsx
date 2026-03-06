@@ -2314,23 +2314,23 @@ export default function App() {
       </div>
 
             {/* --- TOP STATUS BAR --- */}
-                  <header className={`fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between z-50 rounded-none transition-colors duration-300 shrink-0`}>
-                    <div className="flex items-center gap-4 lg:gap-6">
+                  <header className={`fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center gap-4 z-50 rounded-none transition-colors duration-300 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]`}>
+                    <div className="flex items-center gap-4 lg:gap-6 shrink-0">
                       <div className="flex items-center gap-2 whitespace-nowrap" title="Joint Integrated Air and Missile Defense">
                         <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
                           {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6">
+                      <div className="flex items-center gap-x-4 text-[10px] lg:text-xs font-bold tracking-wider border-l border-[#002B40] pl-4 lg:pl-6 shrink-0">
                         <span className="text-[#FFCC00] whitespace-nowrap" title="Weapons Control Status: TIGHT (Fire only at hostiles) / FREE (Fire at any non-friendly)">WCS: <span className={wcs === 'FREE' ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}>{wcs}</span></span>
-                        <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1" />
+                        <div className="hidden lg:block w-px h-4 bg-[#002B40] mx-1 shrink-0" />
                         <span className="text-[#00FF33] whitespace-nowrap" title="Terminal High Altitude Area Defense (Anti-Ballistic)">THAAD: <span className="text-[#00E5FF] tabular-nums">{inventory.thaad}/8</span></span>
                         <span className="text-[#00FF33] whitespace-nowrap" title="Patriot Advanced Capability-3 MSE (Hit-to-Kill Interceptor)">PAC-3: <span className="text-[#00E5FF] tabular-nums">{inventory.pac3}/32</span></span>
                         <span className="text-[#00FF33] whitespace-nowrap" title="Iron Dome Interceptor (Counter-Rocket/UAS)">TAMIR: <span className="text-[#00E5FF] tabular-nums">{inventory.tamir}/120</span></span>
                         <span className="text-[#00FF33] whitespace-nowrap" title="Counter Rocket, Artillery, and Mortar (Terminal Auto-Defense)">C-RAM: <span className="text-[#00E5FF]">RDY</span></span>
                       </div>
                     </div>
-              <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap">
+              <div className="flex items-center gap-4 lg:gap-6 text-[10px] lg:text-xs font-bold whitespace-nowrap shrink-0 ml-auto">
                 {unackAlerts.length > 0 && (
                   <div className="bg-[#FF0033] text-[#00050A] px-2 py-1 animate-pulse border border-[#FF0033]">
                     {unackAlerts.length} UNACK ALERTS
@@ -2389,10 +2389,13 @@ export default function App() {
                     TRACKS
                   </button>
                   <button 
-                    className={`flex-1 py-3 text-xs font-bold tracking-widest ${mobileSheetTab === 'LOGS' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
+                    className={`flex-1 py-3 text-xs font-bold tracking-widest relative ${mobileSheetTab === 'LOGS' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
                     onClick={() => setMobileSheetTab('LOGS')}
                   >
                     LOGS
+                    {unackAlerts.length > 0 && (
+                      <span className="absolute top-2 right-4 w-2 h-2 rounded-full bg-[#FF0033] animate-pulse" />
+                    )}
                   </button>
                 </div>
 
@@ -2413,6 +2416,19 @@ export default function App() {
             </main>
       
             {/* --- BOTTOM SOFT KEY BAR --- */}
+            
+            {/* Mobile Huntress Snippet */}
+            <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom)+0.5rem)] left-2 right-2 pointer-events-none z-40">
+              {logs.filter(l => l.message.startsWith('HUNTRESS:') || l.message.startsWith('ATC:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT').slice(0, 1).map(log => (
+                <div key={`snippet-${log.id}`} className={`bg-[#220000]/80 backdrop-blur-sm border ${!log.acknowledged ? 'border-[#FFCC00] animate-pulse' : 'border-[#FF0033]/50'} p-2 max-w-[80vw] shadow-lg pointer-events-auto cursor-pointer`} onClick={() => { setMobileSheetTab('LOGS'); setMobileSheetOpen(true); }}>
+                  <div className="text-[#FFCC00] text-[8px] font-bold tracking-widest mb-0.5">HUNTRESS COMMS</div>
+                  <div className={`text-[9px] line-clamp-2 leading-tight ${log.type === 'ALERT' ? 'text-white font-bold' : log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' : 'text-[#FFCC00]'}`}>
+                    {log.message.replace(/^(HUNTRESS|ATC|INTEL):\s*/, '')}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <footer className="fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] bg-[#00050A]/95 border-t border-[#002B40] flex items-center gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
         
@@ -2557,19 +2573,6 @@ export default function App() {
 
       {/* CRT Overlay */}
       <div className="fixed inset-0 pointer-events-none z-50 mix-blend-overlay opacity-20 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
-      
-      {/* Portrait Orientation Lock Overlay */}
-      <div className="fixed inset-0 z-[100] bg-[#030712] flex-col items-center justify-center hidden portrait:flex">
-        <div className="text-[#00E5FF] border border-[#00E5FF] bg-[#001A26] p-8 text-center max-w-md mx-4 animate-pulse">
-          <svg className="w-16 h-16 mx-auto mb-6 text-[#00E5FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 10l-4 4-4-4" transform="translate(4, 5) rotate(-90 8 10)" />
-          </svg>
-          <h2 className="text-xl font-bold tracking-widest mb-2">SYSTEM ERROR</h2>
-          <p className="text-sm font-mono text-[#00E5FF]/80">TACTICAL DISPLAY REQUIRES LANDSCAPE ORIENTATION.</p>
-          <p className="text-xs font-mono text-[#00E5FF]/50 mt-4">PLEASE ROTATE DEVICE</p>
-        </div>
-      </div>
     </div>
   );
 }
