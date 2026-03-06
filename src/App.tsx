@@ -1756,6 +1756,8 @@ export default function App() {
   const lastPinchDistance = useRef<number | null>(null);
   const hasDragged = useRef(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const velocityRef = useRef<{ vx: number, vy: number, lastTime: number, lastX: number, lastY: number }>({ vx: 0, vy: 0, lastTime: 0, lastX: 0, lastY: 0 });
+  const inertiaRafRef = useRef<number | null>(null);
 
   const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent | { clientX: number, clientY: number }, container: HTMLDivElement | SVGSVGElement | Element) => {
     const svg = container instanceof SVGSVGElement ? container : container.querySelector('svg');
@@ -1770,6 +1772,14 @@ export default function App() {
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     activePointers.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
     hasDragged.current = false;
+    
+    // Stop any existing inertia
+    if (inertiaRafRef.current) {
+      cancelAnimationFrame(inertiaRafRef.current);
+      inertiaRafRef.current = null;
+    }
+    
+    velocityRef.current = { vx: 0, vy: 0, lastTime: performance.now(), lastX: e.clientX, lastY: e.clientY };
 
     const coords = getMapCoords(e, e.currentTarget);
 
@@ -1859,11 +1869,27 @@ export default function App() {
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
       }
       
-      setCamera(prev => ({
-        ...prev,
-        x: prev.x - dx * scale,
-        y: prev.y - dy * scale
-      }));
+      // Calculate velocity
+      const now = performance.now();
+      const dt = now - velocityRef.current.lastTime;
+      if (dt > 0) {
+        velocityRef.current.vx = (e.clientX - velocityRef.current.lastX) / dt;
+        velocityRef.current.vy = (e.clientY - velocityRef.current.lastY) / dt;
+      }
+      velocityRef.current.lastTime = now;
+      velocityRef.current.lastX = e.clientX;
+      velocityRef.current.lastY = e.clientY;
+
+      setCamera(prev => {
+        let newX = prev.x - dx * scale;
+        let newY = prev.y - dy * scale;
+        
+        // Soft bounds checking
+        newX = Math.max(-50, Math.min(150, newX));
+        newY = Math.max(-50, Math.min(150, newY));
+
+        return { ...prev, x: newX, y: newY };
+      });
       setDragStart({ x: e.clientX, y: e.clientY });
     } else if (activePointers.current.size === 2) {
       const pointers = Array.from(activePointers.current.values());
@@ -1973,6 +1999,59 @@ export default function App() {
     }
 
     if (activePointers.current.size === 0) {
+      if (isDragging && hasDragged.current) {
+        // Apply Inertia
+        const now = performance.now();
+        const dt = now - velocityRef.current.lastTime;
+        
+        // Only apply inertia if the last movement was very recent (a flick, not a stop-then-release)
+        if (dt < 100) {
+          const startVelocityX = velocityRef.current.vx;
+          const startVelocityY = velocityRef.current.vy;
+          const speed = Math.hypot(startVelocityX, startVelocityY);
+          
+          if (speed > 0.5) { // Minimum flick speed threshold
+            const viewBoxWidth = 100 / camera.zoom;
+            const viewBoxHeight = 100 / camera.zoom;
+            // Need to pass in the current container rect, but we can't easily get it here.
+            // We'll estimate scale based on window size for the inertia.
+            const scale = Math.max(viewBoxWidth / window.innerWidth, viewBoxHeight / window.innerHeight);
+
+            let currentVx = startVelocityX * scale;
+            let currentVy = startVelocityY * scale;
+            let lastFrameTime = performance.now();
+
+            const applyInertia = () => {
+              const currentFrameTime = performance.now();
+              const frameDt = currentFrameTime - lastFrameTime;
+              lastFrameTime = currentFrameTime;
+
+              setCamera(prev => {
+                let newX = prev.x - currentVx * frameDt;
+                let newY = prev.y - currentVy * frameDt;
+
+                // Soft bounds checking
+                newX = Math.max(-50, Math.min(150, newX));
+                newY = Math.max(-50, Math.min(150, newY));
+
+                return { ...prev, x: newX, y: newY };
+              });
+
+              // Friction multiplier (e.g., 0.95 means it keeps 95% of its speed each frame)
+              currentVx *= 0.92;
+              currentVy *= 0.92;
+
+              if (Math.abs(currentVx) > 0.001 || Math.abs(currentVy) > 0.001) {
+                inertiaRafRef.current = requestAnimationFrame(applyInertia);
+              } else {
+                inertiaRafRef.current = null;
+              }
+            };
+            inertiaRafRef.current = requestAnimationFrame(applyInertia);
+          }
+        }
+      }
+
       setIsDragging(false);
       setIsSelecting(false);
       setSelectionPolygon([]);
