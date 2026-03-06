@@ -1138,6 +1138,7 @@ export default function App() {
   const [mobileSheetTab, setMobileSheetTab] = useState<'TOTE' | 'LOGS' | 'TRACKS'>('TOTE');
   const [engageMenuOpen, setEngageMenuOpen] = useState(false);
   const [filters, setFilters] = useState({ showUnknowns: true, showFriends: true, showNeutrals: true, showHostiles: true });
+  const [visibleSnippetId, setVisibleSnippetId] = useState<string | null>(null);
   const [buttonFeedback, setButtonFeedback] = useState<Record<string, 'action' | 'error'>>({});
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
@@ -1199,7 +1200,20 @@ export default function App() {
     const timeStr = getZuluTimeStr();
     const logId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     setLogs(prev => [{ id: logId, time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
+    
+    if (message.startsWith('HUNTRESS:') || message.startsWith('ATC:') || message.startsWith('INTEL:') || type === 'WARN' || type === 'ALERT') {
+      setVisibleSnippetId(logId);
+    }
   }, []);
+
+  useEffect(() => {
+    if (visibleSnippetId) {
+      const timer = setTimeout(() => {
+        setVisibleSnippetId(null);
+      }, 6000); // Fade out after 6 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [visibleSnippetId]);
 
   const unackAlerts = useMemo(() => logs.filter(l => !l.acknowledged), [logs]);
 
@@ -2419,11 +2433,11 @@ export default function App() {
 
             {/* Mobile Huntress Snippet */}
             {!mobileSheetOpen && (
-              <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-1/2 bg-gradient-to-r from-[#220000]/90 to-transparent pointer-events-none z-40 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pb-4">
+              <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-1/4 pointer-events-none z-40 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pb-4 flex flex-col justify-end overflow-hidden">
                 {logs.filter(l => l.message.startsWith('HUNTRESS:') || l.message.startsWith('ATC:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT').slice(0, 1).map(log => (
                   <div 
                     key={`snippet-${log.id}`} 
-                    className="pointer-events-auto cursor-pointer" 
+                    className={`pointer-events-auto cursor-pointer bg-gradient-to-r from-[#220000]/90 to-transparent p-2 transition-all duration-1000 transform ${visibleSnippetId === log.id ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} 
                     onClick={() => { setMobileSheetTab('LOGS'); setMobileSheetOpen(true); }}
                   >
                     <div className="text-[#FFCC00] text-[8px] font-bold tracking-widest mb-0.5">HUNTRESS</div>
