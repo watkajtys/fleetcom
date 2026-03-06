@@ -1756,6 +1756,7 @@ export default function App() {
   const lastPinchDistance = useRef<number | null>(null);
   const hasDragged = useRef(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const initialPointerDownRef = useRef<{ x: number, y: number } | null>(null);
   const velocityRef = useRef<{ vx: number, vy: number, lastTime: number, lastX: number, lastY: number }>({ vx: 0, vy: 0, lastTime: 0, lastX: 0, lastY: 0 });
   const inertiaRafRef = useRef<number | null>(null);
 
@@ -1772,6 +1773,7 @@ export default function App() {
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     activePointers.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
     hasDragged.current = false;
+    initialPointerDownRef.current = { x: e.clientX, y: e.clientY };
     
     // Stop any existing inertia
     if (inertiaRafRef.current) {
@@ -1864,9 +1866,13 @@ export default function App() {
       const dx = e.clientX - dragStart.x;
       const dy = e.clientY - dragStart.y;
 
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        hasDragged.current = true;
-        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      if (initialPointerDownRef.current) {
+        const totalDx = e.clientX - initialPointerDownRef.current.x;
+        const totalDy = e.clientY - initialPointerDownRef.current.y;
+        if (Math.abs(totalDx) > 10 || Math.abs(totalDy) > 10) {
+          hasDragged.current = true;
+          if (longPressTimer.current) clearTimeout(longPressTimer.current);
+        }
       }
       
       // Calculate velocity
