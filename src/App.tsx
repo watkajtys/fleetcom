@@ -1940,12 +1940,14 @@ export default function App() {
     } 
     
     // Only fire single tap selection if they didn't drag AND they didn't draw a multi-point lasso
-    if (!hasDragged.current && activePointers.current.size === 0 && (!isSelecting || selectionPolygon.length <= 2)) {
+    // (A tap often registers as a 1 or 2 point polygon due to minor finger roll)
+    if (!hasDragged.current && activePointers.current.size === 0 && (!isSelecting || selectionPolygon.length <= 3)) {
       // Handle single tap selection
       const coords = getMapCoords(e, e.currentTarget);
       const lastSweepTime = useTrackStore.getState().lastSweepTime;
       const elapsed = (nowStore.now - lastSweepTime) / 1000;
-      const CLICK_RADIUS = Math.max(2.5, 4400 / (window.innerWidth * camera.zoom));
+      // Drastically increase hit target for single taps to make it forgiving
+      const CLICK_RADIUS = Math.max(3.5, 6000 / (window.innerWidth * camera.zoom));
 
       const nearbyTracks = useTrackStore.getState().getAllTracks()
         .filter(t => t.detected !== false)
