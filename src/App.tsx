@@ -535,7 +535,6 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
     <aside className="flex-1 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col min-h-0">
       <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[#00E5FF] font-bold">[TRK]</span>
           <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest hidden lg:block">SUMMARY</h2>
         </div>
         <div className="flex gap-1">
@@ -624,29 +623,63 @@ const SystemClock = React.memo(() => {
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
+  const huntressLogs = logs.filter(l => l.message.startsWith('HUNTRESS:'));
+  const sysLogs = logs.filter(l => !l.message.startsWith('HUNTRESS:'));
+
   return (
-    <aside className="h-48 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col shrink-0">
-      <div className="bg-[#001A26]/20 px-3 py-2 border-b border-[#002B40] flex items-center gap-2 shrink-0">
-        <span className="text-[#00E5FF] font-bold">[LOG]</span>
-        <h2 className="text-xs font-bold text-[#00E5FF] tracking-widest">SYSTEM EVENT LOG</h2>
-      </div>
-      <div className="flex-1 overflow-auto p-3 space-y-1.5 flex flex-col-reverse custom-scrollbar">
-        {logs.map((log) => (
-          <div key={log.id} className={`text-[10px] flex gap-2 ${!log.acknowledged ? 'bg-[#FF0033]/20 border border-[#FF0033] p-1' : ''}`}>
-            <div className="flex flex-col w-4 text-[7px] text-[#004466] tabular-nums leading-none shrink-0 border-r border-[#004466]/30 pr-1 justify-center items-center font-bold">
-              <span>{log.time.substring(0, 2)}</span>
-              <span>{log.time.substring(3, 5)}</span>
-              <span>{log.time.substring(6, 8)}</span>
-            </div>
-            <span className={`${
-              log.type === 'ALERT' ? 'text-[#FF0033] font-bold' :
-              log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' :
-              log.type === 'WARN' ? 'text-[#FFCC00]' : 'text-[#00E5FF]'
-            }`}>{log.message}</span>
+    <div className="flex flex-col gap-2 shrink-0">
+      {/* HUNTRESS SECURE NET */}
+      <aside className="h-36 bg-[#220000]/60 backdrop-blur-md border border-[#FF0033]/50 flex flex-col shrink-0 shadow-[0_0_15px_rgba(255,0,51,0.1)]">
+        <div className="bg-[#220000] px-3 py-1.5 border-b border-[#FF0033]/50 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-bold text-[#FFCC00] tracking-widest">HUNTRESS</h2>
           </div>
-        ))}
-      </div>
-    </aside>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 flex flex-col-reverse custom-scrollbar">
+          {huntressLogs.map((log) => (
+            <div key={log.id} className={`text-[10px] flex gap-2 ${!log.acknowledged ? 'border border-[#FFCC00]/50 bg-black/40 p-1' : ''}`}>
+              <div className="flex flex-col w-4 text-[7px] text-[#FF0033] tabular-nums leading-none shrink-0 border-r border-[#FF0033]/30 pr-1 justify-center items-center font-bold">
+                <span>{log.time.substring(0, 2)}</span>
+                <span>{log.time.substring(3, 5)}</span>
+                <span>{log.time.substring(6, 8)}</span>
+              </div>
+              <span className={`${
+                log.type === 'ALERT' ? 'text-white font-bold' :
+                log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' :
+                'text-[#FFCC00]'
+              }`}>{log.message.replace('HUNTRESS: ', '')}</span>
+            </div>
+          ))}
+          {huntressLogs.length === 0 && (
+             <div className="text-[10px] text-[#FFCC00]/50 italic">AWAITING TRANSMISSION...</div>
+          )}
+        </div>
+      </aside>
+
+      {/* SYSTEM EVENT LOG */}
+      <aside className="h-48 bg-[#001A26]/20 backdrop-blur-md border border-[#002B40] flex flex-col shrink-0">
+        <div className="bg-[#001A26]/20 px-3 py-1 border-b border-[#002B40] flex items-center gap-2 shrink-0">
+          <h2 className="text-[10px] font-bold text-[#00E5FF]/70 tracking-widest">ROUTINE LOGS</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-1 flex flex-col-reverse custom-scrollbar opacity-90 hover:opacity-100 transition-opacity">
+          {sysLogs.map((log) => (
+            <div key={log.id} className="text-[9px] flex gap-2">
+              <div className="flex flex-col w-4 text-[6px] text-[#004466] tabular-nums leading-none shrink-0 border-r border-[#004466]/30 pr-1 justify-center items-center font-bold">
+                <span>{log.time.substring(0, 2)}</span>
+                <span>{log.time.substring(3, 5)}</span>
+                <span>{log.time.substring(6, 8)}</span>
+              </div>
+              <span className={`${
+                log.type === 'ALERT' ? 'text-[#FF3366] font-bold' :
+                log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' :
+                log.type === 'WARN' ? 'text-[#FFCC00]' :
+                'text-[#00E5FF]/70'
+              }`}>{log.message}</span>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </div>
   );
 });
 
@@ -716,7 +749,6 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
     <aside className={`w-full bg-[#001A26]/40 backdrop-blur-xl border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-all duration-300 h-fit`}>
       <div className={`px-3 py-1.5 border-b ${masterWarning ? 'bg-[#440000]/40 border-[#FF0033]' : 'bg-[#001A26]/40 border-[#002B40]'} flex items-center justify-between shrink-0`}>
         <div className="flex items-center gap-2">
-          <span className={masterWarning ? 'text-[#FF0033] font-bold text-[10px]' : 'text-[#00E5FF] font-bold text-[10px]'}>[SYS]</span>
           <h2 className={`text-[10px] font-bold tracking-widest ${masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}`}>TACTICAL DATA</h2>
         </div>
         <div className={`px-1.5 py-0.5 text-[9px] font-bold border ${wcs === 'FREE' ? 'bg-[#FF0033] text-[#00050A] border-[#FF0033]' : 'text-[#FFCC00] border-[#FFCC00]'}`}>
@@ -2281,7 +2313,6 @@ export default function App() {
                   <header className={`fixed top-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-[#00050A]/70 backdrop-blur-md border-b ${masterWarning ? 'border-[#FF0033] bg-[#220000]/70' : 'border-[#002B40]'} flex items-center justify-between z-50 rounded-none transition-colors duration-300 shrink-0`}>
                     <div className="flex items-center gap-4 lg:gap-6">
                       <div className="flex items-center gap-2 whitespace-nowrap" title="Joint Integrated Air and Missile Defense">
-                        <span className={masterWarning ? 'text-[#FF0033]' : 'text-[#00E5FF]'}>[SYS]</span>
                         <span className={`text-sm font-bold tracking-widest ${masterWarning ? 'text-[#FF0033] animate-pulse' : 'text-[#00E5FF]'}`}>
                           {masterWarning ? 'ALARM: ENGAGEMENT CRITERIA MET' : 'JIAMD'}
                         </span>
