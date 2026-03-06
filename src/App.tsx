@@ -1539,7 +1539,7 @@ export default function App() {
         });
 
         // 4. Fighter AI (VID, Targeting, and Auto-Engagement)
-        nextTracks = processFighters(nextTracks, events, sweepSimTime);
+        nextTracks = processFighters(nextTracks as Track[], events, sweepSimTime) as any;
 
         // 5, 6, 7. Cleanup RTB, Unified Auto-Engagement, and C-RAM Point Defense
         const doc = doctrineRef.current;
@@ -1818,7 +1818,7 @@ export default function App() {
       setIsSelecting(false);
       setSelectionPolygon([]);
       
-      const pointers = Array.from(activePointers.current.values());
+      const pointers = Array.from(activePointers.current.values()) as {clientX: number, clientY: number}[];
       const dist = Math.hypot(pointers[0].clientX - pointers[1].clientX, pointers[0].clientY - pointers[1].clientY);
       lastPinchDistance.current = dist;
       setFollowedTrackId(null);
@@ -1892,7 +1892,7 @@ export default function App() {
       });
       setDragStart({ x: e.clientX, y: e.clientY });
     } else if (activePointers.current.size === 2) {
-      const pointers = Array.from(activePointers.current.values());
+      const pointers = Array.from(activePointers.current.values()) as {clientX: number, clientY: number}[];
       const currentDist = Math.hypot(pointers[0].clientX - pointers[1].clientX, pointers[0].clientY - pointers[1].clientY);
       
       if (lastPinchDistance.current !== null) {
@@ -1918,7 +1918,7 @@ export default function App() {
     }
 
     if (activePointers.current.size === 1) {
-      const remainingPointer = Array.from(activePointers.current.values())[0];
+      const remainingPointer = Array.from(activePointers.current.values())[0] as {clientX: number, clientY: number};
       setDragStart({ x: remainingPointer.clientX, y: remainingPointer.clientY });
     }
 
