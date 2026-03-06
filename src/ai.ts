@@ -72,11 +72,11 @@ export const processFighters = (
   const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
   
   // Spatial Indexing for fast neighbor lookups
-  const MAX_DETECT_RANGE = 50;
-  const unknownGrid = new SpatialGrid(10); // 10 NM cells for fast 3 NM VID checks
+  const MAX_DETECT_RANGE = 250; // Increased from 50 to 250 to allow AWACS/L16 intercept vectoring across the entire theater
+  const unknownGrid = new SpatialGrid(20); // 20 NM cells for fast 20 NM VID checks
   unknowns.forEach(u => unknownGrid.insert(u));
 
-  const hostileGrid = new SpatialGrid(MAX_DETECT_RANGE); // 50 NM cells for engagement range checks
+  const hostileGrid = new SpatialGrid(50); // 50 NM cells for engagement range checks
   hostiles.forEach(h => hostileGrid.insert(h));
 
   // We use this to prevent two fighters from launching at the same target in the same sweep
@@ -86,10 +86,10 @@ export const processFighters = (
     // We only process active fighters
     if (!track.isFighter || track.isRTB) return track;
 
-    // 2. Visual ID Logic (VID) - Fighter identifies unknowns at close range
-    const nearbyUnknowns = unknownGrid.getNearby(track.x, track.y, 3.0);
+    // 2. Visual ID Logic (VID) - Fighter identifies unknowns at close range (using advanced targeting pod / radar)
+    const nearbyUnknowns = unknownGrid.getNearby(track.x, track.y, 20.0);
     nearbyUnknowns.forEach(u => {
-      if (calculateRange(track.x, track.y, u.x, u.y, track.alt, u.alt) < 3.0) {
+      if (calculateRange(track.x, track.y, u.x, u.y, track.alt, u.alt) < 20.0) {
         const uInNext = trackMap.get(u.id); // O(1) lookup
         if (uInNext && !uInNext.iffInterrogated) {
           const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
@@ -123,17 +123,9 @@ export const processFighters = (
       const range = calculateRange(track.x, track.y, hostile.x, hostile.y, track.alt, hostile.alt);
       if (range > MAX_DETECT_RANGE) continue;
 
-      // Conservation of Fires (Cost-Awareness)
-      // Drones are cheap. Don't waste a $1.2M AMRAAM unless it's getting too close to the Battery.
+      // We prioritize High Value (Cruise Missiles, Aircraft) over Low Value (UAS), 
+      // but fighters will still engage UAS if no high-value targets are available.
       let isHighValue = hostile.category !== 'UAS';
-      let isImmediateThreat = calculateRange(hostile.x, hostile.y, BATTERY_POS.x, BATTERY_POS.y, hostile.alt, 0) < 30;
-
-      if (!isHighValue && !isImmediateThreat) {
-        // Skip this target. It's too cheap and too far away. Let the SHORAD deal with it later.
-        continue;
-      }
-
-      // We prioritize High Value, then Range.
       let targetValue = isHighValue ? 100 : 10;
       
       // If we find a closer target of the same value, take it.
@@ -152,7 +144,8 @@ export const processFighters = (
       if (aspectDiff > 180) aspectDiff = 360 - aspectDiff;
 
       // Fire logic
-      if (minRange <= WEAPON_RANGE && aspectDiff <= 45) {
+      // Expanded to 90 degrees to account for radar field of regard and high-deflection lead pursuit angles
+      if (minRange <= WEAPON_RANGE && aspectDiff <= 90) {
         const targetId = bestTarget.id;
         const fighterId = track.id;
         

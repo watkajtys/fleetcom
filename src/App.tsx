@@ -96,83 +96,115 @@ const getZuluTimeStr = (offsetMs: number = 0) => {
 };
 
 const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showTti }: { interceptor: any, track: Track, color: string, cameraZoom: number, showTti: boolean }) => {
-  const _renderTrigger = useNow(); // Triggers the RAF loop
-  const currentSimTime = nowStore.now; // The actual physics time
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
-  if (!interceptor.engagementTime || !interceptor.interceptDuration || interceptor.interceptTtl === undefined) return null;
   
-  // 1. Calculate continuous progress based on original launch time
-  const elapsedSinceLaunch = currentSimTime - interceptor.engagementTime;
-  
-  if (elapsedSinceLaunch < 0) return null; // Still in the launcher queue
+  const tailLineRef = useRef<SVGLineElement>(null);
+  const pulseLineRef = useRef<SVGLineElement>(null);
+  const headCircleRef = useRef<SVGCircleElement>(null);
+  const textRef = useRef<SVGTextElement>(null);
 
-  const progress = Math.min(1, Math.max(0, elapsedSinceLaunch / interceptor.interceptDuration));
+  useEffect(() => {
+    return nowStore.subscribeTime(() => {
+      const currentSimTime = nowStore.now;
+      const elapsedSinceLaunch = currentSimTime - interceptor.engagementTime;
+      
+      if (elapsedSinceLaunch < 0) return;
 
-  // 2. Smooth TTI for the text display
-  const elapsedSinceLastSweep = (currentSimTime - lastSweepTime) / 1000;
-  const smoothTti = Math.max(0, interceptor.interceptTtl - elapsedSinceLastSweep);
+      const progress = Math.min(1, Math.max(0, elapsedSinceLaunch / interceptor.interceptDuration));
+      const elapsedSinceLastSweep = (currentSimTime - lastSweepTime) / 1000;
+      const smoothTti = Math.max(0, interceptor.interceptTtl - elapsedSinceLastSweep);
 
-  if (progress >= 1) return null;
+      if (progress >= 1) {
+        if (tailLineRef.current) tailLineRef.current.style.display = 'none';
+        if (pulseLineRef.current) pulseLineRef.current.style.display = 'none';
+        if (headCircleRef.current) headCircleRef.current.style.display = 'none';
+        if (textRef.current) textRef.current.style.display = 'none';
+        return;
+      }
 
-  const startX = interceptor.launchPos.x;
-  const startY = interceptor.launchPos.y;
+      const startX = interceptor.launchPos.x;
+      const startY = interceptor.launchPos.y;
 
-  const rad = track.hdg * Math.PI / 180;
-  const sinH = Math.sin(rad);
-  const cosH = Math.cos(rad);
-  const spdNmSec = track.spd / 3600;
+      const rad = track.hdg * Math.PI / 180;
+      const sinH = Math.sin(rad);
+      const cosH = Math.cos(rad);
+      const spdNmSec = track.spd / 3600;
 
-  // 3. Predict where the target is RIGHT NOW (Interpolated)
-  const currentTargetX = track.x + sinH * (spdNmSec * elapsedSinceLastSweep);
-  const currentTargetY = track.y - cosH * (spdNmSec * elapsedSinceLastSweep);
+      const currentTargetX = track.x + sinH * (spdNmSec * elapsedSinceLastSweep);
+      const currentTargetY = track.y - cosH * (spdNmSec * elapsedSinceLastSweep);
 
-  // 4. Predict where the target WILL BE at impact (Lead Point)
-  // Use the remaining duration rather than smoothTti to ensure the lead point stays stable
-  const remainingSecs = (interceptor.interceptDuration - elapsedSinceLaunch) / 1000;
-  const targetLeadX = currentTargetX + sinH * (spdNmSec * remainingSecs);
-  const targetLeadY = currentTargetY - cosH * (spdNmSec * remainingSecs);
+      const remainingSecs = (interceptor.interceptDuration - elapsedSinceLaunch) / 1000;
+      const targetLeadX = currentTargetX + sinH * (spdNmSec * remainingSecs);
+      const targetLeadY = currentTargetY - cosH * (spdNmSec * remainingSecs);
 
-  // 5. Interpolate missile position
-  let missileX = startX + (targetLeadX - startX) * progress;
-  let missileY = startY + (targetLeadY - startY) * progress;
+      let missileX = startX + (targetLeadX - startX) * progress;
+      let missileY = startY + (targetLeadY - startY) * progress;
 
-  // 6. Visual Miss Logic: If this is a miss, start drifting off-target in the final 15% of flight
-  if (interceptor.isPkHit === false && progress > 0.85) {
-    const missProgress = (progress - 0.85) / 0.15;
-    // Drift by up to 2.5 NM by impact time
-    const driftX = Math.sin(interceptor.engagementTime) * 2.5 * missProgress;
-    const driftY = Math.cos(interceptor.engagementTime) * 2.5 * missProgress;
-    missileX += driftX;
-    missileY += driftY;
-  }
+      if (interceptor.isPkHit === false && progress > 0.85) {
+        const missProgress = (progress - 0.85) / 0.15;
+        const driftX = Math.sin(interceptor.engagementTime) * 2.5 * missProgress;
+        const driftY = Math.cos(interceptor.engagementTime) * 2.5 * missProgress;
+        missileX += driftX;
+        missileY += driftY;
+      }
 
-  const dx = targetLeadX - missileX;
-  const dy = targetLeadY - missileY;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  
-  // Visual stabilization: Avoid harsh length cutoff when getting close
-  const visualHeadLength = Math.min(2.0, dist * 0.5); 
-  const leadX = dist > 0 ? missileX + (dx / dist) * visualHeadLength : missileX;
-  const leadY = dist > 0 ? missileY + (dy / dist) * visualHeadLength : missileY;
+      const dx = targetLeadX - missileX;
+      const dy = targetLeadY - missileY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      const visualHeadLength = Math.min(2.0, dist * 0.5); 
+      const leadX = dist > 0 ? missileX + (dx / dist) * visualHeadLength : missileX;
+      const leadY = dist > 0 ? missileY + (dy / dist) * visualHeadLength : missileY;
+
+      if (tailLineRef.current) {
+        tailLineRef.current.style.display = '';
+        tailLineRef.current.setAttribute('x2', missileX.toString());
+        tailLineRef.current.setAttribute('y2', missileY.toString());
+      }
+      
+      if (pulseLineRef.current) {
+        pulseLineRef.current.style.display = '';
+        pulseLineRef.current.setAttribute('x1', missileX.toString());
+        pulseLineRef.current.setAttribute('y1', missileY.toString());
+        pulseLineRef.current.setAttribute('x2', leadX.toString());
+        pulseLineRef.current.setAttribute('y2', leadY.toString());
+        
+        if (interceptor.isPkHit === false && progress > 0.9) {
+          pulseLineRef.current.classList.remove('animate-pulse');
+          pulseLineRef.current.setAttribute('opacity', '0.3');
+        } else {
+          pulseLineRef.current.classList.add('animate-pulse');
+          pulseLineRef.current.setAttribute('opacity', '1.0');
+        }
+      }
+
+      if (headCircleRef.current) {
+        headCircleRef.current.style.display = '';
+        headCircleRef.current.setAttribute('cx', missileX.toString());
+        headCircleRef.current.setAttribute('cy', missileY.toString());
+        headCircleRef.current.setAttribute('opacity', interceptor.isPkHit === false && progress > 0.95 ? '0.5' : '1.0');
+      }
+
+      if (textRef.current && showTti) {
+        if (interceptor.isPkHit === false && progress > 0.9) {
+           textRef.current.style.display = 'none';
+        } else {
+           textRef.current.style.display = '';
+           textRef.current.setAttribute('x', missileX.toString());
+           textRef.current.setAttribute('y', (missileY - (1.2 / cameraZoom)).toString());
+           textRef.current.textContent = `TTI: ${Math.ceil(smoothTti)}s`;
+        }
+      }
+    });
+  }, [interceptor, track, lastSweepTime, cameraZoom, showTti]);
 
   return (
     <g>
-      <line x1={startX} y1={startY} x2={missileX} y2={missileY} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" />
-      {/* If it's a miss and we are in drift, fade the pulse line to indicate loss of track */}
-      <line 
-        x1={missileX} y1={missileY} 
-        x2={leadX} y2={leadY} 
-        stroke={color} 
-        strokeWidth={0.2 / cameraZoom} 
-        className={interceptor.isPkHit === false && progress > 0.9 ? '' : 'animate-pulse'} 
-        opacity={interceptor.isPkHit === false && progress > 0.9 ? 0.3 : 1.0}
-      />
-      <circle cx={missileX} cy={missileY} r={0.3 / cameraZoom} fill={color} opacity={interceptor.isPkHit === false && progress > 0.95 ? 0.5 : 1.0} />
-      {/* Hide TTI if tracking is lost or if explicitly disabled to reduce clutter */}
-      {showTti && !(interceptor.isPkHit === false && progress > 0.9) && (
-        <text x={missileX} y={missileY - (1.2 / cameraZoom)} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
-          TTI: {Math.ceil(smoothTti)}s
-        </text>
+      <line ref={tailLineRef} x1={interceptor.launchPos.x} y1={interceptor.launchPos.y} x2={interceptor.launchPos.x} y2={interceptor.launchPos.y} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" style={{ display: 'none' }} />
+      <line ref={pulseLineRef} x1={interceptor.launchPos.x} y1={interceptor.launchPos.y} x2={interceptor.launchPos.x} y2={interceptor.launchPos.y} stroke={color} strokeWidth={0.2 / cameraZoom} className="animate-pulse" style={{ display: 'none' }} />
+      <circle ref={headCircleRef} cx={interceptor.launchPos.x} cy={interceptor.launchPos.y} r={0.3 / cameraZoom} fill={color} style={{ display: 'none' }} />
+      {showTti && (
+        <text ref={textRef} x={interceptor.launchPos.x} y={interceptor.launchPos.y} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000', display: 'none' }}></text>
       )}
     </g>
   );
@@ -201,10 +233,63 @@ const NTDS_SHAPES: Record<string, string> = {
   SUSPECT: "M 4 14 L 4 8 L 8 4 L 16 4 L 20 8 L 20 14 Z"
 };
 
+const InterpolatedTrackGroup = React.memo(({ track, lastSweepTime, children, ...props }: any) => {
+  const gRef = useRef<SVGGElement>(null);
+  
+  useEffect(() => {
+    return nowStore.subscribeTime(() => {
+      if (!gRef.current) return;
+      const elapsed = (nowStore.now - lastSweepTime) / 1000;
+      const rad = track.hdg * (Math.PI / 180);
+      const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
+      const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
+      gRef.current.setAttribute('transform', `translate(${smoothX}, ${smoothY})`);
+    });
+  }, [track.x, track.y, track.spd, track.hdg, lastSweepTime]);
+
+  const elapsed = (nowStore.now - lastSweepTime) / 1000;
+  const rad = track.hdg * (Math.PI / 180);
+  const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
+  const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
+
+  return <g ref={gRef} transform={`translate(${smoothX}, ${smoothY})`} {...props}>{children}</g>;
+});
+
+const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime, color, cameraZoom, isHooked }: any) => {
+  const lineRef = useRef<SVGLineElement>(null);
+  useEffect(() => {
+    return nowStore.subscribeTime(() => {
+      if (!lineRef.current) return;
+      const age = nowStore.now - interceptor.engagementTime;
+      if (age > 1500 && !isHooked) {
+         lineRef.current.style.display = 'none';
+         return;
+      }
+      lineRef.current.style.display = '';
+      const elapsed = (nowStore.now - lastSweepTime) / 1000;
+      const rad = track.hdg * (Math.PI / 180);
+      const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
+      const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
+      lineRef.current.setAttribute('x2', smoothX.toString());
+      lineRef.current.setAttribute('y2', smoothY.toString());
+    });
+  }, [track.x, track.y, track.spd, track.hdg, lastSweepTime, interceptor.engagementTime, isHooked]);
+
+  return (
+    <line 
+      ref={lineRef}
+      x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
+      x2={track.x} y2={track.y} 
+      stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
+      className="animate-pulse"
+      style={{ display: 'none' }}
+    />
+  );
+});
+
 const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { trackId: string, isHooked: boolean, cameraZoom: number, filters: any }) => {
   const track = useTrackStore(state => state.tracks[trackId]);
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
-  const _renderTrigger = useNow(); // This triggers the re-render loop
   const currentSimTime = nowStore.now;
   
   if (!track || track.detected === false) return null;
@@ -218,12 +303,6 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
 
   if (!showTrack) return null;
 
-  // Use the global sim time, not the component-local `now` snapshot, to prevent render/physics desync
-  const elapsed = (currentSimTime - lastSweepTime) / 1000;
-  const rad = track.hdg * (Math.PI / 180);
-  const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
-  const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
-
   let color = '#FFFF00'; // Pure Yellow (Pending/Unknown)
   if (track.type === 'FRIEND') color = '#00FF33'; // Tactical Green
   else if (track.type === 'ASSUMED_FRIEND' || track.type === 'NEUTRAL') color = '#00FFFF'; // Cyan
@@ -232,24 +311,18 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
 
   // Logarithmic velocity vector
   const vectorLength = 2.0 * Math.log10(track.spd / 10 + 1); 
+  const rad = track.hdg * (Math.PI / 180);
 
   return (
     <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
       {/* Pairing Lines (Shooter to Target) */}
-      {track.interceptors && track.interceptors.map((interceptor) => {
-        const age = currentSimTime - interceptor.engagementTime;
-        if (age > 1500 && !isHooked) return null;
-        
-        return (
-          <line 
-            key={`line-${interceptor.id}`}
-            x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
-            x2={smoothX} y2={smoothY} 
-            stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
-            className="animate-pulse"
-          />
-        );
-      })}
+      {track.interceptors && track.interceptors.map((interceptor) => (
+        <InterpolatedPairingLine 
+          key={`line-${interceptor.id}`}
+          interceptor={interceptor} track={track} lastSweepTime={lastSweepTime} 
+          color={color} cameraZoom={cameraZoom} isHooked={isHooked}
+        />
+      ))}
 
       {/* Missile Vectors & TTI */}
       {track.interceptors && track.interceptors.map((interceptor) => {
@@ -260,13 +333,21 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
         );
       })}
 
-      {/* Track History Breadcrumbs */}
-      {track.history.map((pos, i) => (
-        <circle key={`hist-${track.id}-${i}`} cx={pos.x} cy={pos.y} r={0.2 / cameraZoom} fill={color} opacity={0.8 - (i * 0.05)} />
-      ))}
+      {/* Track History Breadcrumbs (Optimized as single Polyline) */}
+      {track.history.length > 1 && (
+        <polyline 
+          points={track.history.map(pos => `${pos.x},${pos.y}`).join(' ')} 
+          fill="none" 
+          stroke={color} 
+          strokeWidth={0.2 / cameraZoom} 
+          opacity="0.4"
+          strokeDasharray={`${0.4 / cameraZoom} ${0.4 / cameraZoom}`}
+        />
+      )}
       
-      <g 
-        transform={`translate(${smoothX}, ${smoothY})`} 
+      <InterpolatedTrackGroup 
+        track={track} 
+        lastSweepTime={lastSweepTime}
         className="cursor-pointer"
       >
         <circle cx="0" cy="0" r={3 / cameraZoom} fill="transparent" />
@@ -283,8 +364,8 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
           strokeDasharray={track.coasting ? `${0.5 / cameraZoom} ${0.5 / cameraZoom}` : "none"}
         />
 
-        {/* NTDS Air Shapes from lookup */}
-        <g transform={`scale(${0.08 / cameraZoom}) translate(-12, -12)`} stroke={color} strokeWidth="3" fill="none" style={{ filter: `drop-shadow(0 0 2px ${color})` }} strokeDasharray={track.coasting ? "4 4" : "none"}>
+        {/* NTDS Air Shapes from lookup (Removed expensive CSS drop-shadow) */}
+        <g transform={`scale(${0.08 / cameraZoom}) translate(-12, -12)`} stroke={color} strokeWidth="3" fill="none" strokeDasharray={track.coasting ? "4 4" : "none"}>
           <path d={NTDS_SHAPES[track.type] || NTDS_SHAPES.UNKNOWN} />
         </g>
 
@@ -300,7 +381,7 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, filters }: { tr
             </g>
           </g>
         )}
-      </g>
+      </InterpolatedTrackGroup>
     </g>
   );
 }, trackSymbolAreEqual);
@@ -579,8 +660,56 @@ const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
   );
 });
 
+const LiveEngagementTextGroup = React.memo(({ interceptor }: { interceptor: any }) => {
+  const ttiRef = useRef<HTMLDivElement>(null);
+  const rngRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return nowStore.subscribeTime(() => {
+      const elapsed = nowStore.now - interceptor.engagementTime;
+      const progress = Math.min(1, Math.max(0, elapsed / interceptor.interceptDuration));
+      const remainingTti = Math.ceil(Math.max(0, (interceptor.engagementTime + interceptor.interceptDuration - nowStore.now) / 1000));
+      const closingRng = (interceptor.initialRange || 0) * (1 - progress);
+      if (ttiRef.current) ttiRef.current.textContent = `${remainingTti}s`;
+      if (rngRef.current) rngRef.current.textContent = `${Math.round(closingRng)}`;
+    });
+  }, [interceptor]);
+
+  const initRemainingTti = Math.ceil(Math.max(0, (interceptor.engagementTime + interceptor.interceptDuration - nowStore.now) / 1000));
+  const initClosingRng = (interceptor.initialRange || 0) * (1 - Math.min(1, Math.max(0, (nowStore.now - interceptor.engagementTime) / interceptor.interceptDuration)));
+
+  return (
+    <div className="flex flex-col justify-center items-center flex-1 min-w-0 overflow-hidden">
+      <div ref={ttiRef} className="text-[11px] font-bold text-[#00E5FF] leading-none tabular-nums">{initRemainingTti}s</div>
+      <div ref={rngRef} className="text-[8px] text-[#00E5FF] opacity-50 tabular-nums leading-none mt-0.5">{Math.round(initClosingRng)}</div>
+    </div>
+  );
+});
+
+const LiveEngagementTextSingle = React.memo(({ interceptor }: { interceptor: any }) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return nowStore.subscribeTime(() => {
+      const elapsed = nowStore.now - interceptor.engagementTime;
+      const progress = Math.min(1, Math.max(0, elapsed / interceptor.interceptDuration));
+      const remainingTti = Math.ceil(Math.max(0, (interceptor.engagementTime + interceptor.interceptDuration - nowStore.now) / 1000));
+      const closingRng = (interceptor.initialRange || 0) * (1 - progress);
+      if (ref.current) ref.current.textContent = `${remainingTti}s / ${closingRng.toFixed(1)} NM`;
+    });
+  }, [interceptor]);
+
+  const initRemainingTti = Math.ceil(Math.max(0, (interceptor.engagementTime + interceptor.interceptDuration - nowStore.now) / 1000));
+  const initClosingRng = (interceptor.initialRange || 0) * (1 - Math.min(1, Math.max(0, (nowStore.now - interceptor.engagementTime) / interceptor.interceptDuration)));
+
+  return (
+    <div ref={ref} className="text-right text-[#FF0033] font-bold tabular-nums">
+      {initRemainingTti}s / {initClosingRng.toFixed(1)} NM
+    </div>
+  );
+});
+
 const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setVectoringTrackId, doctrine, setDoctrine, filters, setFilters, wcs, setWcs }: { hookedTrackIds: string[], masterWarning: boolean, vectoringTrackId: string | null, setVectoringTrackId: (id: string | null) => void, doctrine: EngagementDoctrine, setDoctrine: React.Dispatch<React.SetStateAction<EngagementDoctrine>>, filters: any, setFilters: React.Dispatch<React.SetStateAction<any>>, wcs: 'TIGHT' | 'FREE', setWcs: (wcs: 'TIGHT' | 'FREE') => void }) => {
-  const _renderTrigger = useNow(); // Triggers the re-render loop for TTI
   const tracksMap = useTrackStore(state => state.tracks);
   const hookedTracks = useMemo(() => hookedTrackIds.map(id => tracksMap[id]).filter(Boolean), [hookedTrackIds, tracksMap]);
 
@@ -640,20 +769,13 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                         (a.engagementTime + a.interceptDuration) - (b.engagementTime + b.interceptDuration)
                       );
                       const i = sortedInterceptors[0];
-                      const elapsed = nowStore.now - i.engagementTime;
-                      const progress = Math.min(1, Math.max(0, elapsed / i.interceptDuration));
-                      const remainingTti = Math.ceil(Math.max(0, (i.engagementTime + i.interceptDuration - nowStore.now) / 1000));
-                      const closingRng = (i.initialRange || 0) * (1 - progress);
 
                       return (
                         <div key={`group-eng-${t.id}`} className="flex gap-0.5 border border-[#FF0033]/20 bg-[#FF0033]/5 p-0.5 min-w-0">
                           <div className="flex flex-col w-3 text-[7px] text-[#FF0033] font-bold border-r border-[#FF0033]/30 shrink-0 justify-center items-center leading-none">
                             {t.id.split('').map((char, idx) => <span key={idx}>{char}</span>)}
                           </div>
-                          <div className="flex flex-col justify-center items-center flex-1 min-w-0 overflow-hidden">
-                            <div className="text-[11px] font-bold text-[#00E5FF] leading-none tabular-nums">{remainingTti}s</div>
-                            <div className="text-[8px] text-[#00E5FF] opacity-50 tabular-nums leading-none mt-0.5">{Math.round(closingRng)}</div>
-                          </div>
+                          <LiveEngagementTextGroup interceptor={i} />
                         </div>
                       );
                     })}
@@ -702,10 +824,6 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                       (a.engagementTime + a.interceptDuration) - (b.engagementTime + b.interceptDuration)
                     );
                     const i = sorted[0];
-                    const elapsed = nowStore.now - i.engagementTime;
-                    const progress = Math.min(1, Math.max(0, elapsed / i.interceptDuration));
-                    const remainingTti = Math.ceil(Math.max(0, (i.engagementTime + i.interceptDuration - nowStore.now) / 1000));
-                    const closingRng = (i.initialRange || 0) * (1 - progress);
                     
                     return (
                       <React.Fragment key={i.id}>
@@ -713,9 +831,7 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                           <div className="w-1 h-1 rounded-full bg-[#FF0033] animate-pulse" />
                           {i.weapon} TTI / RNG
                         </div>
-                        <div className="text-right text-[#FF0033] font-bold tabular-nums">
-                          {remainingTti}s / {closingRng.toFixed(1)} NM
-                        </div>
+                        <LiveEngagementTextSingle interceptor={i} />
                       </React.Fragment>
                     );
                   })()}
@@ -920,22 +1036,47 @@ const DraggableWindow = ({ defaultPos, title, children, className = '' }: { defa
 
 const GhostVectorLine = React.memo(({ vectoringTrackId, cameraZoom }: { vectoringTrackId: string, cameraZoom: number }) => {
   const track = useTrackStore(state => state.tracks[vectoringTrackId]);
-  const mouse = useMouseCoords();
   
-  if (!track || (mouse.x === 0 && mouse.y === 0)) return null;
+  const lineRef = useRef<SVGLineElement>(null);
+  const crosshairGroupRef = useRef<SVGGElement>(null);
+  
+  useEffect(() => {
+    if (!track) return;
+    return nowStore.subscribeMouse(() => {
+      const mouse = nowStore.getMouseSnapshot();
+      if (mouse.x === 0 && mouse.y === 0) return;
+      if (lineRef.current) {
+        lineRef.current.setAttribute('x2', mouse.x.toString());
+        lineRef.current.setAttribute('y2', mouse.y.toString());
+        lineRef.current.style.display = '';
+      }
+      if (crosshairGroupRef.current) {
+        crosshairGroupRef.current.setAttribute('transform', `translate(${mouse.x}, ${mouse.y})`);
+        crosshairGroupRef.current.style.display = '';
+      }
+    });
+  }, [track]);
+
+  if (!track) return null;
+  const initialMouse = nowStore.getMouseSnapshot();
+  const initX = initialMouse.x || track.x;
+  const initY = initialMouse.y || track.y;
+  const isHidden = initialMouse.x === 0 && initialMouse.y === 0;
 
   return (
     <g>
       <line 
+        ref={lineRef}
         x1={track.x} y1={track.y} 
-        x2={mouse.x} y2={mouse.y} 
+        x2={initX} y2={initY} 
         stroke="#00E5FF" 
         strokeWidth={0.2 / cameraZoom} 
         strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
         className="animate-pulse"
+        style={{ display: isHidden ? 'none' : '' }}
       />
       {/* Static Crosshair - No Ping to avoid "errant ghosting" */}
-      <g transform={`translate(${mouse.x}, ${mouse.y})`}>
+      <g ref={crosshairGroupRef} transform={`translate(${initX}, ${initY})`} style={{ display: isHidden ? 'none' : '' }}>
         <line x1={-0.8 / cameraZoom} y1={0} x2={0.8 / cameraZoom} y2={0} stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} />
         <line x1={0} y1={-0.8 / cameraZoom} x2={0} y2={0.8 / cameraZoom} stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} />
         <circle r={0.5 / cameraZoom} fill="none" stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} opacity="0.5" />
@@ -1147,21 +1288,18 @@ export default function App() {
         
         events.length = 0; // Clear events to prevent duplicates in React Strict Mode double-invocations
 
-        // 1. Progress intercepts (Visual countdown only)
-        let nextTracks = currentTracks.map(t => {
-          if (t.interceptors && t.interceptors.length > 0) {
-            const updatedInterceptors = t.interceptors.map(i => ({
+        // 1 & 2 & 3. Progress intercepts, Standard movement, and ROE Processor
+        let nextTracks = currentTracks.map(track => {
+          // 1. Progress intercepts (Visual countdown only)
+          let newInterceptors = track.interceptors;
+          if (newInterceptors && newInterceptors.length > 0) {
+            newInterceptors = newInterceptors.map(i => ({
               ...i,
               interceptTtl: Math.max(0, i.interceptTtl - actualElapsedSecs)
             })); 
-            
-            return { ...t, interceptors: updatedInterceptors };
           }
-          return t;
-        });
 
-        // 2. Standard movement and physics
-        nextTracks = nextTracks.map(track => {
+          // 2. Standard movement and physics
           // IMPORTANT: Update position using PREVIOUS speed and heading to perfectly match the extrapolator's visual prediction
           // This eliminates the 3-second 'jump' when a track accelerates or turns.
           const initialSpeedFactor = (track.spd / 3600) * actualElapsedSecs;
@@ -1328,184 +1466,151 @@ export default function App() {
                     const isDetected = track.sensor === 'L16' || rangeToBattery <= detectionRange || spottedByFighter;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
-          return { ...track, x: resX, y: resY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint, fuel: newFuel };
-        });
+          
+          let updatedTrack = { ...track, x: resX, y: resY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint, fuel: newFuel, interceptors: newInterceptors };
 
-        // 3. ROE Processor (Auto-ID)
-        nextTracks = nextTracks.map(t => {
-          if (t.type === 'PENDING' || t.type === 'UNKNOWN') {
-            if (t.category === 'TBM' || t.category === 'ROCKET' || t.category === 'CM') {
-               return { ...t, type: 'HOSTILE', threatName: getThreatName(t.category) };
-            }
-            if (t.category === 'UAS') {
-              return { ...t, type: 'SUSPECT', threatName: 'UAS' };
+          // 3. ROE Processor (Auto-ID)
+          if (updatedTrack.type === 'PENDING' || updatedTrack.type === 'UNKNOWN') {
+            if (updatedTrack.category === 'TBM' || updatedTrack.category === 'ROCKET' || updatedTrack.category === 'CM') {
+               updatedTrack.type = 'HOSTILE';
+               updatedTrack.threatName = getThreatName(updatedTrack.category);
+            } else if (updatedTrack.category === 'UAS') {
+              updatedTrack.type = 'SUSPECT';
+              updatedTrack.threatName = 'UAS';
             }
           }
           // Escalate SUSPECT UAS to HOSTILE if they are within 15NM of any asset
-          if (t.type === 'SUSPECT' && t.category === 'UAS') {
+          if (updatedTrack.type === 'SUSPECT' && updatedTrack.category === 'UAS') {
              for (const asset of DEFENDED_ASSETS) {
-               if (calculateRange(t.x, t.y, asset.x, asset.y) < 15) {
-                 return { ...t, type: 'HOSTILE' };
+               if (calculateRange(updatedTrack.x, updatedTrack.y, asset.x, asset.y) < 15) {
+                 updatedTrack.type = 'HOSTILE';
+                 break;
                }
              }
           }
-          return t;
+          
+          return updatedTrack;
         });
 
         // 4. Fighter AI (VID, Targeting, and Auto-Engagement)
         nextTracks = processFighters(nextTracks, events, sweepSimTime);
 
-        // 5. Cleanup and RTB
-        nextTracks = nextTracks.map(track => {
-          if (track.isFighter && !track.isRTB) {
-            if (track.missilesRemaining === 0) {
-              events.push({ type: 'LOG', message: `${track.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
-              return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
-            }
-            if (track.fuel !== undefined && track.maxFuel !== undefined && track.fuel < (track.maxFuel * 0.25)) {
-              events.push({ type: 'LOG', message: `${track.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
-              return { ...track, isRTB: true, targetWaypoint: { x: 57.5, y: 62.5 } };
-            }
-          }
-          return track;
-        });
-
-        // 6. Unified Auto-Engagement Doctrine (THAAD / PAC-3 / TAMIR)
+        // 5, 6, 7. Cleanup RTB, Unified Auto-Engagement, and C-RAM Point Defense
         const doc = doctrineRef.current;
         const currentWcs = wcsRef.current;
         let shotsFiredThisSweep = 0;
 
         nextTracks = nextTracks.map(t => {
-          // Determine if this target is eligible for auto-engagement
-          const isHostile = t.type === 'HOSTILE';
-          const isSuspect = t.type === 'SUSPECT';
-          
-          // WCS FREE allows engagement of SUSPECTS. WCS TIGHT requires HOSTILE.
+          let updatedTrack = { ...t };
+          let changed = false;
+
+          // 5. Cleanup and RTB
+          if (updatedTrack.isFighter && !updatedTrack.isRTB) {
+            if (updatedTrack.missilesRemaining === 0) {
+              events.push({ type: 'LOG', message: `${updatedTrack.id}: Winchester. RTB Al Minhad.`, logType: 'INFO' });
+              updatedTrack.isRTB = true;
+              updatedTrack.targetWaypoint = { x: 57.5, y: 62.5 };
+              changed = true;
+            } else if (updatedTrack.fuel !== undefined && updatedTrack.maxFuel !== undefined && updatedTrack.fuel < (updatedTrack.maxFuel * 0.25)) {
+              events.push({ type: 'LOG', message: `${updatedTrack.id}: Bingo fuel. RTB Al Minhad.`, logType: 'WARN' });
+              updatedTrack.isRTB = true;
+              updatedTrack.targetWaypoint = { x: 57.5, y: 62.5 };
+              changed = true;
+            }
+          }
+
+          // 6. Unified Auto-Engagement Doctrine (THAAD / PAC-3 / TAMIR)
+          const isHostile = updatedTrack.type === 'HOSTILE';
+          const isSuspect = updatedTrack.type === 'SUSPECT';
           const isEngageable = isHostile || (currentWcs === 'FREE' && isSuspect);
-          if (!isEngageable) return t;
-
-          // Check if already being engaged by enough interceptors (conservation of fire)
-          const existingInterceptors = t.interceptors ? t.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
           
-          let weaponToUse: 'THAAD' | 'PAC-3' | 'TAMIR' | null = null;
-          let maxSalvo = 1; // Default to single shot
+          if (isEngageable) {
+            const existingInterceptors = updatedTrack.interceptors ? updatedTrack.interceptors.filter(i => i.shooterId === 'BATTERY').length : 0;
+            let weaponToUse: 'THAAD' | 'PAC-3' | 'TAMIR' | null = null;
+            let maxSalvo = 1;
 
-          if (t.category === 'TBM' && doc.autoEngageTBM) {
-            // Priority: THAAD for long-range, PAC-3 for close-range
-            const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0);
-            if (rng > 40 && rng <= 100 && inventoryRef.current.thaad > 0) {
-              weaponToUse = 'THAAD';
-              maxSalvo = 1; 
+            if (updatedTrack.category === 'TBM' && doc.autoEngageTBM) {
+              const rng = calculateRange(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+              if (rng > 40 && rng <= 100 && inventoryRef.current.thaad > 0) { weaponToUse = 'THAAD'; maxSalvo = 1; }
+              else if (rng <= 40 && inventoryRef.current.pac3 > 0) { weaponToUse = 'PAC-3'; maxSalvo = 1; }
+            } else if (updatedTrack.category === 'CM' && doc.autoEngageCM) {
+              if (inventoryRef.current.pac3 > 0) { weaponToUse = 'PAC-3'; maxSalvo = 1; }
+              else if (inventoryRef.current.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = 2; }
+            } else if (updatedTrack.category === 'ROCKET' && doc.autoEngageRocket) {
+              if (inventoryRef.current.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = 2; }
+            } else if (updatedTrack.category === 'UAS' && doc.autoEngageUAS) {
+              if (inventoryRef.current.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = 2; }
             }
-            else if (rng <= 40 && inventoryRef.current.pac3 > 0) {
-              weaponToUse = 'PAC-3';
-              maxSalvo = 1;
-            }
-          } 
-          else if (t.category === 'CM' && doc.autoEngageCM) {
-            if (inventoryRef.current.pac3 > 0) {
-              weaponToUse = 'PAC-3';
-              maxSalvo = 1;
-            }
-            else if (inventoryRef.current.tamir > 0) {
-              weaponToUse = 'TAMIR';
-              maxSalvo = 2; // Double tap CMs with Tamir
-            }
-          }
-          else if (t.category === 'ROCKET' && doc.autoEngageRocket) {
-            if (inventoryRef.current.tamir > 0) {
-              weaponToUse = 'TAMIR';
-              maxSalvo = 2; // Double tap rockets
-            }
-          }
-          else if (t.category === 'UAS' && doc.autoEngageUAS) {
-            if (inventoryRef.current.tamir > 0) {
-              weaponToUse = 'TAMIR';
-              maxSalvo = 2; // Double tap drones
-            }
-          }
 
-          if (weaponToUse && existingInterceptors < maxSalvo) {
-            const stats = WEAPON_STATS[weaponToUse];
-            const rng = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0);
+            if (weaponToUse && existingInterceptors < maxSalvo) {
+              const stats = WEAPON_STATS[weaponToUse];
+              const rng = calculateRange(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+              
+              if (rng <= stats.range) {
+                const missileSpdNmSec = stats.speedMach * MACH_TO_NM_SEC;
+                const closureRate = calculateClosureRate(BATTERY_POS, updatedTrack, missileSpdNmSec);
+                const shotDelayMs = (shotsFiredThisSweep * 250);
+                shotsFiredThisSweep++;
+                const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (shotDelayMs / 1000);
+                const isPkHit = Math.random() <= stats.pk;
+
+                const newInterceptor = {
+                  id: `${weaponToUse}-AUTO-${sweepSimTime}-${Math.random()}`,
+                  weapon: weaponToUse,
+                  shooterId: 'BATTERY',
+                  launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
+                  engagementTime: sweepSimTime + shotDelayMs,
+                  interceptDuration: interceptTimeSecs * 1000,
+                  interceptTtl: Math.ceil(interceptTimeSecs),
+                  initialRange: rng,
+                  isPkHit
+                };
+
+                const invKey = weaponToUse.toLowerCase().replace('-3', '3') as keyof typeof inventory;
+                inventoryRef.current[invKey]--;
+                incrementInterceptorsFired(weaponToUse);
+                const costStr = stats.cost >= 1000000 ? `$${(stats.cost / 1000000).toFixed(1)}M` : `$${Math.round(stats.cost / 1000)}K`;
+                events.push({ type: 'LOG', message: `AUTO-ENGAGE TRK ${updatedTrack.id} (${weaponToUse}) [${costStr}]`, logType: 'ACTION' });
+                events.push({ type: 'COST', amount: stats.cost });
+
+                updatedTrack.interceptors = [...(updatedTrack.interceptors || []), newInterceptor];
+                changed = true;
+              }
+            }
             
-            if (rng <= stats.range) {
-              const shooterId = 'BATTERY';
-              const missileSpdNmSec = stats.speedMach * MACH_TO_NM_SEC;
-              const closureRate = calculateClosureRate(BATTERY_POS, t, missileSpdNmSec);
-              
-              // Physical launch stagger
-              const shotDelayMs = (shotsFiredThisSweep * 250);
-              shotsFiredThisSweep++;
+            // 7. Terminal Point Defense (C-RAM / Laser CIWS)
+            if (updatedTrack.type === 'HOSTILE' && updatedTrack.category !== 'TBM' && (!updatedTrack.interceptors || !updatedTrack.interceptors.some(i => i.shooterId.startsWith('C-RAM')))) {
+              for (const asset of DEFENDED_ASSETS) {
+                if (!asset.hasCram) continue;
+                const rngToAsset = calculateRange(updatedTrack.x, updatedTrack.y, asset.x, asset.y, updatedTrack.alt, 0);
+                if (rngToAsset <= 2.5) {
+                  incrementInterceptorsFired('C-RAM');
+                  const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
+                  events.push({ type: 'LOG', message: `C-RAM (${asset.id}) ENGAGING LEAKER TRK ${updatedTrack.id} (-${costStr})`, logType: 'ACTION' });
+                  events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
+                  
+                  const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, updatedTrack, WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC);
+                  const interceptTimeSecs = rngToAsset / Math.max(0.1, closureRate);
+                  const isPkHit = Math.random() <= WEAPON_STATS['C-RAM'].pk;
 
-              const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (shotDelayMs / 1000);
-              const isPkHit = Math.random() <= stats.pk;
-
-              const newInterceptor = {
-                id: `${weaponToUse}-AUTO-${sweepSimTime}-${Math.random()}`,
-                weapon: weaponToUse,
-                shooterId,
-                launchPos: { x: BATTERY_POS.x, y: BATTERY_POS.y },
-                engagementTime: sweepSimTime + shotDelayMs,
-                interceptDuration: interceptTimeSecs * 1000,
-                interceptTtl: Math.ceil(interceptTimeSecs),
-                initialRange: rng,
-                isPkHit
-              };
-
-              // Update inventory
-              const invKey = weaponToUse.toLowerCase().replace('-3', '3') as keyof typeof inventory;
-              inventoryRef.current[invKey]--;
-              
-              const costStr = stats.cost >= 1000000 ? `$${(stats.cost / 1000000).toFixed(1)}M` : `$${Math.round(stats.cost / 1000)}K`;
-              events.push({ type: 'LOG', message: `AUTO-ENGAGE TRK ${t.id} (${weaponToUse}) [${costStr}]`, logType: 'ACTION' });
-              events.push({ type: 'COST', amount: stats.cost });
-
-              return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
+                  const newInterceptor = {
+                    id: `CRAM-${sweepSimTime}-${Math.random()}`, weapon: 'C-RAM' as const, shooterId: `C-RAM (${asset.id})`,
+                    launchPos: { x: asset.x, y: asset.y }, engagementTime: sweepSimTime, interceptDuration: interceptTimeSecs * 1000,
+                    interceptTtl: Math.ceil(interceptTimeSecs), isPkHit
+                  };
+                  updatedTrack.interceptors = [...(updatedTrack.interceptors || []), newInterceptor];
+                  changed = true;
+                  break; // only one C-RAM engagement per sweep per track needed
+                }
+              }
             }
           }
-          return t;
+
+          return changed ? updatedTrack : t;
         });
 
         // Sync inventory back to state
         setInventory({ ...inventoryRef.current });
-
-        // 7. Terminal Point Defense (C-RAM / Laser CIWS)
-                nextTracks = nextTracks.map(t => {
-                  if (t.type === 'HOSTILE' && t.category !== 'TBM' && (!t.interceptors || !t.interceptors.some(i => i.shooterId.startsWith('C-RAM')))) {
-                    // Check if track is threatening ANY defended asset that has C-RAM equipped
-                    for (const asset of DEFENDED_ASSETS) {
-                      if (!asset.hasCram) continue;
-                      
-                      const rngToAsset = calculateRange(t.x, t.y, asset.x, asset.y, t.alt, 0);
-                      if (rngToAsset <= 2.5) {
-                        incrementInterceptorsFired('C-RAM');
-                        const costStr = WEAPON_STATS['C-RAM'].cost >= 1000000 ? `$${(WEAPON_STATS['C-RAM'].cost / 1000000).toFixed(1)}M` : `$${(WEAPON_STATS['C-RAM'].cost / 1000).toFixed(1)}K`;
-                        events.push({ type: 'LOG', message: `C-RAM (${asset.id}) ENGAGING LEAKER TRK ${t.id} (-${costStr})`, logType: 'ACTION' });
-                        events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
-                        
-                        const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, t, WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC);
-                        const interceptTimeSecs = rngToAsset / Math.max(0.1, closureRate);
-                        
-                        // Pre-calculate Pk
-                        const isPkHit = Math.random() <= WEAPON_STATS['C-RAM'].pk;
-
-                        const newInterceptor = {
-                          id: `CRAM-${sweepSimTime}-${Math.random()}`,
-                          weapon: 'C-RAM' as const,
-                          shooterId: `C-RAM (${asset.id})`,
-                          launchPos: { x: asset.x, y: asset.y }, // Launch from the asset, not the battery
-                          engagementTime: sweepSimTime,
-                          interceptDuration: interceptTimeSecs * 1000,
-                          interceptTtl: Math.ceil(interceptTimeSecs),
-                          isPkHit
-                        };
-                        return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
-                      }
-                    }
-                  }
-                  return t;
-                });
 
                                                 // 5. Leaker Detection (Impacts on Dubai)
                                                 const impactedTracks: { trackId: string, assetId: string | null, damage: number, x: number, y: number }[] = [];
@@ -2064,13 +2169,38 @@ export default function App() {
           {/* Render Splashes */}
           {splashes.map(s => (
             <g key={s.id} transform={`translate(${s.x}, ${s.y})`}>
-              <circle r={2 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" style={{ animationIterationCount: 1, animationFillMode: 'forwards' }} />
-              <line x1={-1 / camera.zoom} y1={-1 / camera.zoom} x2={1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
-              <line x1={1 / camera.zoom} y1={-1 / camera.zoom} x2={-1 / camera.zoom} y2={1 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
+              <circle r={0.8 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" style={{ animationIterationCount: 1, animationFillMode: 'forwards' }} />
+              <line x1={-0.4 / camera.zoom} y1={-0.4 / camera.zoom} x2={0.4 / camera.zoom} y2={0.4 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
+              <line x1={0.4 / camera.zoom} y1={-0.4 / camera.zoom} x2={-0.4 / camera.zoom} y2={0.4 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
             </g>
           ))}
 
                     {trackIds.map(trackId => {
+                      const track = useTrackStore.getState().tracks[trackId];
+                      if (!track) return null;
+                      
+                      // Viewport Culling
+                      const viewBoxWidth = 100 / camera.zoom;
+                      const viewBoxHeight = 100 / camera.zoom;
+                      const left = camera.x - viewBoxWidth / 2 - 10; // 10 NM padding
+                      const right = camera.x + viewBoxWidth / 2 + 10;
+                      const top = camera.y - viewBoxHeight / 2 - 10;
+                      const bottom = camera.y + viewBoxHeight / 2 + 10;
+                      
+                      // Very fast rough bounds check
+                      if (track.x < left || track.x > right || track.y < top || track.y > bottom) {
+                        // Check if it's hooked. We ALWAYS render hooked tracks so their UI doesn't break,
+                        // and we always render fighters so their waypoints work correctly.
+                        if (!hookedTrackIds.includes(trackId) && !track.isFighter) {
+                           // Is it being shot at? If a missile is flying to it, we should render it 
+                           // just in case the missile vector starts on-screen.
+                           const hasActiveInterceptors = track.interceptors && track.interceptors.length > 0;
+                           if (!hasActiveInterceptors) {
+                             return null; 
+                           }
+                        }
+                      }
+
                       return (
                         <TrackSymbol 
                           key={`track-group-${trackId}`} 

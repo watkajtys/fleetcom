@@ -57,19 +57,30 @@ export const useTrackStore = create<TrackStore>((set, get) => {
         const currentArray = state.trackIds.map(id => state.tracks[id]);
         const newArray = updater(currentArray);
         
-        const newMap: Record<string, Track> = {};
-        const newIds: string[] = [];
-        newArray.forEach(t => {
-          newMap[t.id] = t;
-          newIds.push(t.id);
-        });
+        // Optimization: If the array reference hasn't changed and there's no sim time update,
+        // we can bail out entirely to prevent React from re-rendering components.
+        if (newArray === currentArray && currentSimTime === undefined) {
+          return state;
+        }
+        
+        const newState: any = {};
+        
+        if (newArray !== currentArray) {
+          const newMap: Record<string, Track> = {};
+          const newIds: string[] = [];
+          newArray.forEach(t => {
+            newMap[t.id] = t;
+            newIds.push(t.id);
+          });
+          newState.tracks = newMap;
+          newState.trackIds = newIds;
+        }
 
-        const newState: any = { tracks: newMap, trackIds: newIds };
         if (currentSimTime !== undefined) {
           newState.lastSweepTime = currentSimTime;
         }
 
-        return newState;
+        return Object.keys(newState).length > 0 ? newState : state;
       });
     },
 
