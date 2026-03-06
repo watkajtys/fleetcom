@@ -1783,7 +1783,7 @@ export default function App() {
     }
 
     if (activePointers.current.size === 1) {
-      if (e.shiftKey || isSelectMode) {
+      if (e.shiftKey) {
         setIsSelecting(true);
         setSelectionPolygon([{ x: coords.x, y: coords.y }]);
       } else {
@@ -1931,10 +1931,10 @@ export default function App() {
       if (inLasso.length > 0) {
         // If they drew a polygon with only 1 point (a tap), don't treat it as a group hook
         if (selectionPolygon.length > 2) {
-            setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
+            setHookedTrackIds(prev => e.shiftKey ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
             addLog(`GROUP HOOK: ${inLasso.length} TRACKS SELECTED`, 'INFO');
         }
-      } else if (!e.shiftKey && !isSelectMode && selectionPolygon.length > 2) {
+      } else if (!e.shiftKey && selectionPolygon.length > 2) {
         setHookedTrackIds([]);
       }
     } 
@@ -2531,17 +2531,6 @@ export default function App() {
             
             <footer className="fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] bg-[#00050A]/95 border-t border-[#002B40] flex items-center gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
-        
-        <button 
-          className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[10px] lg:text-xs font-bold tracking-widest transition-all flex flex-col items-center justify-center whitespace-nowrap ${
-            isSelectMode ? 'bg-[#00E5FF] border-[#00E5FF] text-[#00050A]' : 'bg-[#001A26] border-[#004466] text-[#00E5FF]'
-          }`}
-          onClick={() => setIsSelectMode(!isSelectMode)}
-          title="Toggle Multi-Select Mode (Drag to select multiple tracks)"
-        >
-          <span className={`text-[8px] mb-0.5 ${isSelectMode ? 'text-[#00050A] opacity-70' : 'text-[#004466]'}`}>~</span>
-          MULTI
-        </button>
 
         <button 
           className={`h-10 px-2 lg:px-4 border hover:bg-[#002B40] text-[#00E5FF] text-[10px] lg:text-xs font-bold tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed flex flex-col items-center justify-center whitespace-nowrap ${
