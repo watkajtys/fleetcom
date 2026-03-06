@@ -1170,7 +1170,6 @@ export default function App() {
   const [camera, setCamera] = useState({ x: BATTERY_POS.x, y: BATTERY_POS.y, zoom: 0.5 });
   const [isDragging, setIsDragging] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectionPolygon, setSelectionPolygon] = useState<{ x: number, y: number }[]>([]);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [followedTrackId, setFollowedTrackId] = useState<string | null>(null);
@@ -1756,6 +1755,7 @@ export default function App() {
   const activePointers = useRef<Map<number, { clientX: number, clientY: number }>>(new Map());
   const lastPinchDistance = useRef<number | null>(null);
   const hasDragged = useRef(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent | { clientX: number, clientY: number }, container: HTMLDivElement | SVGSVGElement | Element) => {
     const svg = container instanceof SVGSVGElement ? container : container.querySelector('svg');
@@ -1787,11 +1787,23 @@ export default function App() {
         setIsSelecting(true);
         setSelectionPolygon([{ x: coords.x, y: coords.y }]);
       } else {
+        // Start long press timer for lasso
+        longPressTimer.current = setTimeout(() => {
+          if (!hasDragged.current && activePointers.current.size === 1) {
+            setIsSelecting(true);
+            setIsDragging(false);
+            setSelectionPolygon([{ x: coords.x, y: coords.y }]);
+            // Optional: provide haptic feedback if supported by browser
+            if (navigator.vibrate) navigator.vibrate(50);
+          }
+        }, 400);
+
         setIsDragging(true);
         setDragStart({ x: e.clientX, y: e.clientY });
         setFollowedTrackId(null);
       }
     } else if (activePointers.current.size === 2) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
       setIsDragging(false);
       setIsSelecting(false);
       setSelectionPolygon([]);
@@ -1844,6 +1856,7 @@ export default function App() {
 
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
         hasDragged.current = true;
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
       }
       
       setCamera(prev => ({
@@ -1872,6 +1885,7 @@ export default function App() {
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     activePointers.current.delete(e.pointerId);
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
 
     if (activePointers.current.size < 2) {
       lastPinchDistance.current = null;
@@ -1915,12 +1929,18 @@ export default function App() {
         .map(t => t.id);
 
       if (inLasso.length > 0) {
-        setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
-        addLog(`GROUP HOOK: ${inLasso.length} TRACKS SELECTED`, 'INFO');
-      } else if (!e.shiftKey && !isSelectMode) {
+        // If they drew a polygon with only 1 point (a tap), don't treat it as a group hook
+        if (selectionPolygon.length > 2) {
+            setHookedTrackIds(prev => (e.shiftKey || isSelectMode) ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
+            addLog(`GROUP HOOK: ${inLasso.length} TRACKS SELECTED`, 'INFO');
+        }
+      } else if (!e.shiftKey && !isSelectMode && selectionPolygon.length > 2) {
         setHookedTrackIds([]);
       }
-    } else if (!hasDragged.current && activePointers.current.size === 0) {
+    } 
+    
+    // Only fire single tap selection if they didn't drag AND they didn't draw a multi-point lasso
+    if (!hasDragged.current && activePointers.current.size === 0 && (!isSelecting || selectionPolygon.length <= 2)) {
       // Handle single tap selection
       const coords = getMapCoords(e, e.currentTarget);
       const lastSweepTime = useTrackStore.getState().lastSweepTime;
