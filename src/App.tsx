@@ -2389,23 +2389,12 @@ export default function App() {
                     TRACKS
                   </button>
                   <button 
-                    className={`flex-1 py-1.5 px-2 text-xs font-bold tracking-widest relative flex flex-col items-center justify-center overflow-hidden ${mobileSheetTab === 'LOGS' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
+                    className={`flex-1 py-3 text-xs font-bold tracking-widest relative ${mobileSheetTab === 'LOGS' ? 'bg-[#002B40] text-[#00E5FF] border-b-2 border-[#00E5FF]' : 'text-[#00E5FF]/50'}`}
                     onClick={() => setMobileSheetTab('LOGS')}
                   >
-                    <span>LOGS</span>
-                    {(() => {
-                      const latestLog = logs.find(l => l.message.startsWith('HUNTRESS:') || l.message.startsWith('ATC:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT');
-                      if (latestLog) {
-                        return (
-                          <span className={`text-[8px] truncate w-full mt-0.5 max-w-[120px] ${!latestLog.acknowledged ? 'animate-pulse text-[#FF3366]' : 'text-[#FFCC00]/70'}`}>
-                            {latestLog.message.replace(/^(HUNTRESS|ATC|INTEL):\s*/, '')}
-                          </span>
-                        );
-                      }
-                      return null;
-                    })()}
+                    LOGS
                     {unackAlerts.length > 0 && (
-                      <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#FF0033]" />
+                      <span className="absolute top-2 right-4 w-2 h-2 rounded-full bg-[#FF0033] animate-pulse" />
                     )}
                   </button>
                 </div>
@@ -2427,6 +2416,24 @@ export default function App() {
             </main>
       
             {/* --- BOTTOM SOFT KEY BAR --- */}
+
+            {/* Mobile Huntress Snippet */}
+            {!mobileSheetOpen && (
+              <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-1/2 bg-gradient-to-r from-[#220000]/90 to-transparent pointer-events-none z-40 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pb-4">
+                {logs.filter(l => l.message.startsWith('HUNTRESS:') || l.message.startsWith('ATC:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT').slice(0, 1).map(log => (
+                  <div 
+                    key={`snippet-${log.id}`} 
+                    className="pointer-events-auto cursor-pointer" 
+                    onClick={() => { setMobileSheetTab('LOGS'); setMobileSheetOpen(true); }}
+                  >
+                    <div className="text-[#FFCC00] text-[8px] font-bold tracking-widest mb-0.5">HUNTRESS</div>
+                    <div className={`text-[9px] line-clamp-3 leading-tight pr-4 ${log.type === 'ALERT' ? 'text-white font-bold' : log.type === 'ACTION' ? 'text-[#00E5FF] font-bold' : 'text-[#FFCC00]'}`}>
+                      {log.message.replace(/^(HUNTRESS|ATC|INTEL):\s*/, '')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             
             <footer className="fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] bg-[#00050A]/95 border-t border-[#002B40] flex items-center gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
