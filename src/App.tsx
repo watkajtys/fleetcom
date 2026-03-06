@@ -1147,8 +1147,8 @@ export default function App() {
   const simTimeRef = useRef(0);
 
   useEffect(() => {
-    nowStore.setPaused(isPaused);
-  }, [isPaused]);
+    nowStore.setPaused(!isGameStarted || isPaused);
+  }, [isPaused, isGameStarted]);
 
   const incrementInterceptorsFired = useTrackStore(state => state.incrementInterceptorsFired);
   const addLeaker = useTrackStore(state => state.addLeaker);
