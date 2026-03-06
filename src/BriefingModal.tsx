@@ -24,16 +24,16 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#00050A]/90 backdrop-blur-sm p-4 text-[#00E5FF] font-mono">
       
-      <div className="max-w-2xl w-full border border-[#004466] bg-[#001A26]/80 flex flex-col shadow-2xl shadow-[#00E5FF]/10">
+      <div className="max-w-2xl w-full max-h-[90vh] border border-[#004466] bg-[#001A26]/80 flex flex-col shadow-2xl shadow-[#00E5FF]/10">
         
         {/* Header */}
-        <div className="bg-[#002B40] px-4 py-2 border-b border-[#004466] flex justify-between items-center">
+        <div className="bg-[#002B40] px-4 py-2 border-b border-[#004466] flex justify-between items-center shrink-0">
           <span className="font-bold tracking-widest text-xs">JOINT INTEGRATED AIR & MISSILE DEFENSE (JIAMD)</span>
           <span className="text-[#00FFFF] text-[10px] animate-pulse">CLASSIFIED // NOFORN</span>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 md:p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
           
           <div className="flex flex-col md:grid md:grid-cols-3 gap-4 border-b border-[#004466]/50 pb-4 text-xs">
             <div className="flex justify-between md:block">
