@@ -2433,7 +2433,7 @@ export default function App() {
 
             {/* Mobile Huntress Snippet */}
             {!mobileSheetOpen && (
-              <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-1/4 pointer-events-none z-40 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pb-4 flex flex-col justify-end overflow-hidden">
+              <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-[calc(50vw+3rem)] pointer-events-none z-40 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pb-4 flex flex-col justify-end overflow-hidden">
                 {logs.filter(l => l.message.startsWith('HUNTRESS:') || l.message.startsWith('ATC:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT').slice(0, 1).map(log => (
                   <div 
                     key={`snippet-${log.id}`} 
