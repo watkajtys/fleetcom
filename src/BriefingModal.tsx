@@ -35,27 +35,21 @@ const BriefingModal = ({ onStart }: { onStart: () => void }) => {
         {/* Content */}
         <div className="p-4 md:p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
           
-          <div className="flex flex-col md:grid md:grid-cols-3 gap-4 border-b border-[#004466]/50 pb-4 text-xs">
-            <div className="flex justify-between md:block">
-              <div className="text-[#004466] mb-1">LOCAL TERMINAL</div>
-              <div className="text-right md:text-left">
-                <div className="text-base lg:text-lg">{userTimeStr}</div>
-                <div className="opacity-70 text-[10px]">{userDateStr}</div>
-              </div>
+          <div className="flex justify-between items-start border-b border-[#004466]/50 pb-4 text-xs">
+            <div className="text-left">
+              <div className="text-[#004466] mb-1 text-[8px] md:text-xs">LOCAL</div>
+              <div className="text-sm md:text-lg">{userTimeStr}</div>
+              <div className="opacity-70 text-[8px] md:text-[10px]">{userDateStr}</div>
             </div>
-            <div className="flex justify-between md:block">
-              <div className="text-[#004466] mb-1 md:text-center">SECTOR (GST)</div>
-              <div className="text-right md:text-center">
-                <div className="text-base lg:text-lg text-[#FFCC00]">{gstTimeStr}</div>
-                <div className="opacity-70 text-[#FFCC00]/70 text-[10px]">{gstDateStr}</div>
-              </div>
+            <div className="text-center">
+              <div className="text-[#004466] mb-1 text-[8px] md:text-xs">SECTOR (GST)</div>
+              <div className="text-sm md:text-lg text-[#FFCC00]">{gstTimeStr}</div>
+              <div className="opacity-70 text-[#FFCC00]/70 text-[8px] md:text-[10px]">{gstDateStr}</div>
             </div>
-            <div className="flex justify-between md:block">
-              <div className="text-[#004466] mb-1 md:text-right">ZULU (UTC)</div>
-              <div className="text-right">
-                <div className="text-base lg:text-lg">{zuluTimeStr}</div>
-                <div className="opacity-70 text-[10px]">GLOBAL REF</div>
-              </div>
+            <div className="text-right">
+              <div className="text-[#004466] mb-1 text-[8px] md:text-xs">ZULU (UTC)</div>
+              <div className="text-sm md:text-lg">{zuluTimeStr}</div>
+              <div className="opacity-70 text-[8px] md:text-[10px]">GLOBAL REF</div>
             </div>
           </div>
 
