@@ -2448,6 +2448,44 @@ export default function App() {
                 ))}
               </div>
             )}
+
+            {/* Mobile Selected Track Snippet */}
+            {!mobileSheetOpen && hookedTrackIds.length > 0 && (
+              <div 
+                className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] right-0 left-[calc(50vw+3rem)] bg-gradient-to-l from-[#001A26]/90 to-transparent pointer-events-auto cursor-pointer z-40 p-2 pr-[max(0.5rem,env(safe-area-inset-right))] pb-4 flex flex-col justify-end text-right overflow-hidden"
+                onClick={() => { setMobileSheetTab('TOTE'); setMobileSheetOpen(true); }}
+              >
+                {(() => {
+                  const tracksMap = useTrackStore.getState().tracks;
+                  const hookedTracks = hookedTrackIds.map(id => tracksMap[id]).filter(Boolean);
+                  if (hookedTracks.length === 0) return null;
+                  
+                  if (hookedTracks.length > 1) {
+                     return (
+                       <div className="p-2">
+                         <div className="text-[#00E5FF] text-[8px] font-bold tracking-widest mb-0.5">HOOKED GROUP</div>
+                         <div className="text-[9px] font-bold text-white">{hookedTracks.length} TRACKS SELECTED</div>
+                       </div>
+                     );
+                  }
+                  
+                  const t = hookedTracks[0];
+                  let color = '#FFFF00';
+                  if (t.type === 'FRIEND') color = '#00FF33';
+                  else if (t.type === 'ASSUMED_FRIEND' || t.type === 'NEUTRAL') color = '#00FFFF';
+                  else if (t.type === 'HOSTILE') color = '#FF0033';
+                  else if (t.type === 'SUSPECT') color = '#FF8800';
+
+                  return (
+                    <div className="p-2">
+                      <div className="text-[8px] font-bold tracking-widest mb-0.5" style={{ color }}>{t.type}</div>
+                      <div className="text-[9px] font-bold text-white line-clamp-1">{t.threatName || t.id}</div>
+                      <div className="text-[9px] text-[#00E5FF]/80 line-clamp-1">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : `${Math.round(t.alt)} FT`} / {Math.round(t.spd)} KTS</div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
             
             <footer className="fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] bg-[#00050A]/95 border-t border-[#002B40] flex items-center gap-1 lg:gap-2 z-50 shrink-0 pointer-events-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="text-[#004466] text-[10px] font-bold mr-2 lg:mr-4 whitespace-nowrap">OSD / SOFT KEYS</div>
