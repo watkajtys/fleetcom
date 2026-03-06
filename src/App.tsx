@@ -2244,6 +2244,7 @@ export default function App() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
         style={{ cursor: vectoringTrackId ? 'crosshair' : (isDragging ? (isSelecting ? 'crosshair' : 'grabbing') : 'grab') }}
       >

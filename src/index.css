@@ -54,5 +54,7 @@ body {
   color: #e2e8f0; /* slate-200 for better readability than pure cyan */
   overflow: hidden;
   overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
