@@ -26,6 +26,12 @@ interface TrackStore {
   addLeaker: (assetId?: string) => void;
   addDefenseCost: (amount: number) => void;
   addEnemyCost: (amount: number) => void;
+
+  // ROE State
+  wcs: 'TIGHT' | 'FREE';
+  setWcs: (wcs: 'TIGHT' | 'FREE') => void;
+  doctrine: { autoEngageTBM: boolean; autoEngageCM: boolean; autoEngageUAS: boolean; autoEngageRocket: boolean };
+  setDoctrine: (doctrine: { autoEngageTBM: boolean; autoEngageCM: boolean; autoEngageUAS: boolean; autoEngageRocket: boolean }) => void;
 }
 
 export const useTrackStore = create<TrackStore>((set, get) => {
@@ -51,6 +57,10 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     leakerCount: 0,
     defenseCost: 0,
     enemyCost: 0,
+    wcs: 'TIGHT',
+    setWcs: (wcs) => set({ wcs }),
+    doctrine: { autoEngageTBM: false, autoEngageCM: false, autoEngageUAS: false, autoEngageRocket: false },
+    setDoctrine: (doctrine) => set({ doctrine }),
 
     setTracks: (updater, currentSimTime) => {
       set((state) => {

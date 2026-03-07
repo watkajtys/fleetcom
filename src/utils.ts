@@ -69,7 +69,9 @@ export const calculateClosureRate = (shooter: {x: number, y: number, alt?: numbe
   if (target.category === 'TBM' && calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y) < 40) {
     tvz = -4000 * FT_TO_NM; // 4000 ft/sec descent
   } else if (target.category === 'ROCKET') {
-    tvz = -50 * FT_TO_NM; // Steady descent per App.tsx logic
+    // Rockets now apex at 45NM and descend ~666ft per horizontal NM.
+    // At 1400 knots (0.38 NM/sec), this equates to roughly 250 ft/sec descent.
+    tvz = -250 * FT_TO_NM;
   }
 
   // Unit vector from target to shooter

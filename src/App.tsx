@@ -62,11 +62,14 @@ const nowStore = {
   },
 
   start: () => {
+    cancelAnimationFrame(nowStore.rafId);
     nowStore.realTime = Date.now();
     const tick = () => {
       const currentReal = Date.now();
-      const dt = currentReal - nowStore.realTime;
+      let dt = currentReal - nowStore.realTime;
       nowStore.realTime = currentReal;
+
+      if (dt > 100) dt = 16; // Prevent massive time jumps on tab restore
 
       if (!nowStore.isPaused) {
         nowStore.now += dt;
@@ -200,11 +203,11 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
 
   return (
     <g>
-      <line ref={tailLineRef} x1={interceptor.launchPos.x} y1={interceptor.launchPos.y} x2={interceptor.launchPos.x} y2={interceptor.launchPos.y} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" style={{ display: 'none' }} />
-      <line ref={pulseLineRef} x1={interceptor.launchPos.x} y1={interceptor.launchPos.y} x2={interceptor.launchPos.x} y2={interceptor.launchPos.y} stroke={color} strokeWidth={0.2 / cameraZoom} className="animate-pulse" style={{ display: 'none' }} />
-      <circle ref={headCircleRef} cx={interceptor.launchPos.x} cy={interceptor.launchPos.y} r={0.3 / cameraZoom} fill={color} style={{ display: 'none' }} />
+      <line ref={tailLineRef} x1={interceptor.launchPos.x} y1={interceptor.launchPos.y} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" style={{ display: 'none' }} />
+      <line ref={pulseLineRef} stroke={color} strokeWidth={0.2 / cameraZoom} className="animate-pulse" style={{ display: 'none' }} />
+      <circle ref={headCircleRef} r={0.3 / cameraZoom} fill={color} style={{ display: 'none' }} />
       {showTti && (
-        <text ref={textRef} x={interceptor.launchPos.x} y={interceptor.launchPos.y} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000', display: 'none' }}></text>
+        <text ref={textRef} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000', display: 'none' }}></text>
       )}
     </g>
   );
@@ -235,6 +238,15 @@ const NTDS_SHAPES: Record<string, string> = {
 const InterpolatedTrackGroup = React.memo(({ track, lastSweepTime, children, ...props }: any) => {
   const gRef = useRef<SVGGElement>(null);
   
+  React.useLayoutEffect(() => {
+    if (!gRef.current) return;
+    const elapsed = (nowStore.now - lastSweepTime) / 1000;
+    const rad = track.hdg * (Math.PI / 180);
+    const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
+    const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
+    gRef.current.setAttribute('transform', `translate(${smoothX}, ${smoothY})`);
+  }, [track.x, track.y, track.spd, track.hdg, lastSweepTime]);
+
   useEffect(() => {
     return nowStore.subscribeTime(() => {
       if (!gRef.current) return;
@@ -246,16 +258,22 @@ const InterpolatedTrackGroup = React.memo(({ track, lastSweepTime, children, ...
     });
   }, [track.x, track.y, track.spd, track.hdg, lastSweepTime]);
 
-  const elapsed = (nowStore.now - lastSweepTime) / 1000;
-  const rad = track.hdg * (Math.PI / 180);
-  const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
-  const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
-
-  return <g ref={gRef} transform={`translate(${smoothX}, ${smoothY})`} {...props}>{children}</g>;
+  return <g ref={gRef} {...props}>{children}</g>;
 });
 
 const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime, color, cameraZoom, isHooked }: any) => {
   const lineRef = useRef<SVGLineElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (!lineRef.current) return;
+    const elapsed = (nowStore.now - lastSweepTime) / 1000;
+    const rad = track.hdg * (Math.PI / 180);
+    const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
+    const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
+    lineRef.current.setAttribute('x2', smoothX.toString());
+    lineRef.current.setAttribute('y2', smoothY.toString());
+  }, [track.x, track.y, track.spd, track.hdg, lastSweepTime]);
+
   useEffect(() => {
     return nowStore.subscribeTime(() => {
       if (!lineRef.current) return;
@@ -278,9 +296,7 @@ const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime,
     <line 
       ref={lineRef}
       x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
-      x2={track.x} y2={track.y} 
       stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
-      className="animate-pulse"
       style={{ display: 'none' }}
     />
   );
@@ -439,15 +455,12 @@ const StaticMapBackground = React.memo(({ cameraZoom }: { cameraZoom: number }) 
 
     {/* Hajar Mountains (Eastern Topo Lines) - Constrained strictly between the coasts */}
     <g opacity="0.5" stroke="#FFFFFF" strokeWidth={0.3 / cameraZoom} fill="none">
-      <path d="M 105,10 Q 100,40 105,80 Q 110,120 115,180" />
-      <path d="M 110,15 Q 105,45 110,85 Q 115,125 120,185" />
-      <path d="M 115,20 Q 110,50 115,90 Q 120,130 125,190" />
+      <path d="M 102,30 Q 100,60 105,80 Q 110,120 115,180" />
+      <path d="M 108,35 Q 105,65 110,85 Q 115,125 120,185" />
+      <path d="M 114,40 Q 110,70 115,90 Q 120,130 125,190" />
       <text x="110" y="70" fill="#FFFFFF" fontSize={1.0 / cameraZoom} fontFamily="monospace" stroke="none" transform="rotate(75 110 70)">HAJAR MOUNTAINS</text>
     </g>
 
-    {/* Defended Urban Footprint (Dubai Metropolitan Area) - Aligned to coast */}
-    <path d="M 40,60 L 58,43 L 63,49 L 45,66 Z" fill="#00FF00" fillOpacity="0.05" stroke="#00FF00" strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} />
-    <text x="47" y="55" fill="#00FF00" fontSize={0.6 / cameraZoom} fontFamily="monospace" opacity="0.4" transform="rotate(-43 47 55)">DEFENDED METRO AREA</text>
     {/* Radar Sector (FOV Wedge) - 120 degrees looking North */}
     <g transform={`translate(${BATTERY_POS.x}, ${BATTERY_POS.y})`}>
       <path d="M 0 0 L -43.3 -75 A 86.6 86.6 0 0 1 43.3 -75 Z" fill="#00FFFF" fillOpacity="0.02" stroke="#00FFFF" strokeWidth={0.1 / cameraZoom} strokeDasharray={`${1 / cameraZoom} ${2 / cameraZoom}`} />
@@ -623,13 +636,13 @@ const SystemClock = React.memo(() => {
 });
 
 const SystemEventLog = React.memo(({ logs }: { logs: SystemLog[] }) => {
-  const isNarrativeLog = (log: SystemLog) => 
-    log.message.startsWith('HUNTRESS:') || 
-    log.message.startsWith('ATC:') || 
-    log.message.startsWith('INTEL:') || 
-    log.type === 'WARN' || 
-    log.type === 'ALERT';
-  
+    const isNarrativeLog = (log: SystemLog) => {
+      if (log.message.startsWith('FALCON') || log.message.startsWith('ATC:')) return false;
+      return log.message.startsWith('HUNTRESS:') ||
+        log.message.startsWith('INTEL:') ||
+        log.type === 'WARN' ||
+        log.type === 'ALERT';
+    };  
   const huntressLogs = logs.filter(l => isNarrativeLog(l));
   const sysLogs = logs.filter(l => !isNarrativeLog(l));
 
@@ -716,7 +729,7 @@ const LiveEngagementTextGroup = React.memo(({ interceptor }: { interceptor: any 
   );
 });
 
-const LiveEngagementTextSingle = React.memo(({ interceptor }: { interceptor: any }) => {
+const LiveEngagementTextSingle = React.memo(({ interceptor, compact = false }: { interceptor: any, compact?: boolean }) => {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -725,16 +738,22 @@ const LiveEngagementTextSingle = React.memo(({ interceptor }: { interceptor: any
       const progress = Math.min(1, Math.max(0, elapsed / interceptor.interceptDuration));
       const remainingTti = Math.ceil(Math.max(0, (interceptor.engagementTime + interceptor.interceptDuration - nowStore.now) / 1000));
       const closingRng = (interceptor.initialRange || 0) * (1 - progress);
-      if (ref.current) ref.current.textContent = `${remainingTti}s / ${closingRng.toFixed(1)} NM`;
+      if (ref.current) {
+         if (compact) {
+            ref.current.textContent = `${interceptor.weapon} • ${remainingTti}s • ${closingRng.toFixed(1)} NM`;
+         } else {
+            ref.current.textContent = `${remainingTti}s / ${closingRng.toFixed(1)} NM`;
+         }
+      }
     });
-  }, [interceptor]);
+  }, [interceptor, compact]);
 
   const initRemainingTti = Math.ceil(Math.max(0, (interceptor.engagementTime + interceptor.interceptDuration - nowStore.now) / 1000));
   const initClosingRng = (interceptor.initialRange || 0) * (1 - Math.min(1, Math.max(0, (nowStore.now - interceptor.engagementTime) / interceptor.interceptDuration)));
 
   return (
-    <div ref={ref} className="text-right text-[#FF0033] font-bold tabular-nums">
-      {initRemainingTti}s / {initClosingRng.toFixed(1)} NM
+    <div ref={ref} className={compact ? "text-[10px] text-[#FF0033] font-bold tabular-nums tracking-widest uppercase" : "text-right text-[#FF0033] font-bold tabular-nums"}>
+      {compact ? `${interceptor.weapon} • ${initRemainingTti}s • ${initClosingRng.toFixed(1)} NM` : `${initRemainingTti}s / ${initClosingRng.toFixed(1)} NM`}
     </div>
   );
 });
@@ -1127,13 +1146,10 @@ export default function App() {
     { id: 'initial-4', time: getZuluTimeStr(-30000), message: 'INTEL: HEIGHTENED LEVEL OF ENCRYPTED CHATTER DETECTED IN SECTOR', type: 'WARN', acknowledged: true },
   ]);
   const [inventory, setInventory] = useState({ pac3: 32, tamir: 120, thaad: 8, cram: 999 });
-  const [doctrine, setDoctrine] = useState<EngagementDoctrine>({
-    autoEngageTBM: false,
-    autoEngageCM: false,
-    autoEngageUAS: false,
-    autoEngageRocket: false
-  });
-  const [wcs, setWcs] = useState<'TIGHT' | 'FREE'>('TIGHT');
+  const doctrine = useTrackStore(state => state.doctrine);
+  const setDoctrine = useTrackStore(state => state.setDoctrine);
+  const wcs = useTrackStore(state => state.wcs);
+  const setWcs = useTrackStore(state => state.setWcs);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [mobileSheetTab, setMobileSheetTab] = useState<'TOTE' | 'LOGS' | 'TRACKS'>('TOTE');
   const [engageMenuOpen, setEngageMenuOpen] = useState(false);
@@ -1171,7 +1187,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionPolygon, setSelectionPolygon] = useState<{ x: number, y: number }[]>([]);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0 });
   const [followedTrackId, setFollowedTrackId] = useState<string | null>(null);
   const [vectoringTrackId, setVectoringTrackId] = useState<string | null>(null);
   const [draggingWaypointId, setDraggingWaypointId] = useState<string | null>(null);
@@ -1200,7 +1216,8 @@ export default function App() {
     const logId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     setLogs(prev => [{ id: logId, time: timeStr, message, type, acknowledged: type !== 'ALERT' }, ...prev].slice(0, 50));
     
-    if (message.startsWith('HUNTRESS:') || message.startsWith('ATC:') || message.startsWith('INTEL:') || type === 'WARN' || type === 'ALERT') {
+    const isNarrative = !message.startsWith('FALCON') && !message.startsWith('ATC:') && (message.startsWith('HUNTRESS:') || message.startsWith('INTEL:') || type === 'WARN' || type === 'ALERT');
+    if (isNarrative) {
       setVisibleSnippetId(logId);
     }
   }, []);
@@ -1240,6 +1257,16 @@ export default function App() {
                 destroyedIds.add(t.id);
                 anyDestroyed = true;
 
+                // Track Civilian Shot Down
+                const isHijack = t.id === 'FLT-EK404';
+                const isCivilian = !isHijack && (t.category === 'FW' || t.category === 'RW') && t.type !== 'HOSTILE' && t.spd > 250 && t.alt > 10000;
+                
+                if (isHijack || isCivilian) {
+                    setTimeout(() => {
+                      addLog(`CIVILIAN AIRLINER SHOT DOWN (${t.id}). MASS CASUALTIES.`, 'ALERT');
+                    }, 100);
+                }
+
                 // Visual Splash at interpolated position
                 const rad = t.hdg * (Math.PI / 180);
                 const smoothX = t.x + Math.sin(rad) * ((t.spd / 3600) * elapsed);
@@ -1271,6 +1298,8 @@ export default function App() {
         });
 
         if (anyDestroyed) {
+          // IMPORTANT: Instantly remove it from the master state array 
+          // so the 3-second radar sweep doesn't register a ground impact
           return next.filter(t => !destroyedIds.has(t.id));
         }
         return anyInterceptorsRemoved ? next : current;
@@ -1297,18 +1326,7 @@ export default function App() {
         const newTracks = event.generateTracks();
         setTracks(current => [...current, ...newTracks]);
         addLog(event.message, event.type);
-
-        // ROE Escalation: First TBM launch triggers WCS FREE and enables auto-engagement
-        if (newTracks.some(t => t.category === 'TBM') && wcsRef.current === 'TIGHT') {
-          setWcs('FREE');
-          setDoctrine({
-            autoEngageTBM: true,
-            autoEngageCM: true,
-            autoEngageUAS: true,
-            autoEngageRocket: true
-          });
-          addLog('WCS SET TO FREE. AUTO-ENGAGEMENT DOCTRINE ACTIVATED FOR ALL THREATS.', 'ALERT');
-        }
+        if (event.action) event.action();
 
         // Calculate enemy cost for this wave
         const waveCost = newTracks.reduce((acc, t) => {
@@ -1414,9 +1432,44 @@ export default function App() {
             const distToBattery = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y, track.alt, 0);
             
             if (track.id === 'FLT-EK404') {
-              // Hijack Profile: Aggressive descent to evade radar, throttle up
-              if (newAlt > 5000) newAlt = Math.max(5000, newAlt - 500); // 10,000 ft/min emergency descent
-              if (newSpd < 650) newSpd += 10; 
+              if (simTimeRef.current >= 25) {
+                // Hijack Profile: Turn towards Dubai, aggressive descent, then land at DXB Airport
+                const targetX = 60; // DXB Airport X
+                const targetY = 46; // DXB Airport Y
+                const dx = targetX - track.x;
+                const dy = targetY - track.y;
+                const distToTarget = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distToTarget > 2) {
+                  // Steer towards target (aggressive right turn at 4 deg/sec for hijacked airliner)
+                  let desiredHdg = Math.atan2(dx, -dy) * (180 / Math.PI);
+                  if (desiredHdg < 0) desiredHdg += 360;
+                  let hdgDiff = desiredHdg - newHdg;
+                  if (hdgDiff > 180) hdgDiff -= 360;
+                  if (hdgDiff < -180) hdgDiff += 360;
+                  // Force a right turn if the diff is around 180
+                  if (Math.abs(hdgDiff) > 170 && hdgDiff < 0) hdgDiff = -hdgDiff;
+                  
+                  newHdg = (newHdg + Math.max(-4 * actualElapsedSecs, Math.min(4 * actualElapsedSecs, hdgDiff)) + 360) % 360;
+
+                  // Descend to approach altitude (approx 10,000 ft/min dive = ~166 ft/sec)
+                  if (newAlt > 5000) newAlt = Math.max(5000, newAlt - 166 * actualElapsedSecs); 
+                  // Accelerate
+                  if (newSpd < 650) newSpd += 10 * actualElapsedSecs; 
+                } else if (distToTarget > 0.5) {
+                  // Final approach
+                  newAlt = Math.max(1000, newAlt - 500 * actualElapsedSecs);
+                  if (newSpd > 250) newSpd -= 50 * actualElapsedSecs;
+                } else {
+                  // landing
+                  newAlt = Math.max(0, newAlt - 500 * actualElapsedSecs);
+                  if (newSpd > 150) newSpd -= 50 * actualElapsedSecs;
+                  
+                  if (newAlt === 0 && newSpd <= 150) {
+                      newSpd = 0; // stop moving on the ground
+                  }
+                }
+              }
             } else if (track.category === 'TBM') {
               // Ballistic Profile: Exospheric cruise, then terminal hypersonic dive
               const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
@@ -1439,7 +1492,16 @@ export default function App() {
               const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
               const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
               const distToTarget2D = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0);
-              newAlt = Math.max(0, Math.min(newAlt, (distToTarget2D / 40) * 30000));
+              
+              // Simple robust altitude profile: Apex early, then long descent.
+              // Start descending when 45 NM away.
+              const apogee = 30000;
+              if (distToTarget2D > 45) {
+                 newAlt = apogee;
+              } else {
+                 // Drops ~666ft per 1 NM remaining (30000 / 45)
+                 newAlt = Math.max(0, distToTarget2D * (apogee / 45));
+              }
             } else if (track.category === 'UAS') {
               // Drone Swarm: Slight altitude weave, and steer toward target asset
               newAlt = Math.max(100, track.alt + (Math.random() * 20 - 10));
@@ -1452,6 +1514,20 @@ export default function App() {
                 // Slow drones turn slowly
                 newHdg = (newHdg + Math.max(-2, Math.min(2, hdgDiff)) * (actualElapsedSecs / 3.0) + 360) % 360;
               }
+            }
+
+            // Civilian / Assumed Friend Interpolation for ATC Vectors
+            if (track.targetHdg !== undefined) {
+              let hdgDiff = track.targetHdg - newHdg;
+              if (hdgDiff > 180) hdgDiff -= 360;
+              if (hdgDiff < -180) hdgDiff += 360;
+              // Civilian standard rate turn (3 deg/sec)
+              newHdg = (newHdg + Math.max(-3 * actualElapsedSecs, Math.min(3 * actualElapsedSecs, hdgDiff)) + 360) % 360;
+            }
+            if (track.targetSpd !== undefined) {
+              const spdDiff = track.targetSpd - newSpd;
+              // Civilian acceleration/deceleration (~10 knots/sec)
+              newSpd = newSpd + Math.max(-10 * actualElapsedSecs, Math.min(10 * actualElapsedSecs, spdDiff));
             }
 
             // Cruise Missile Steering (Guided LACM)
@@ -1479,6 +1555,7 @@ export default function App() {
                         resX = tgtX;
                         resY = tgtY;
                         newSpd = 0; // Arrest horizontal speed, let it drop/detonate
+                        newAlt = 0; // Force altitude to 0 so it immediately registers as a ground impact
                       }
                     }
           
@@ -1516,6 +1593,11 @@ export default function App() {
           let updatedTrack = { ...track, x: resX, y: resY, history: newHistory, coasting: track.tq <= 2, detected: isDetected, spd: newSpd, alt: newAlt, hdg: newHdg, targetWaypoint: newTargetWaypoint, fuel: newFuel, interceptors: newInterceptors };
 
           // 3. ROE Processor (Auto-ID)
+          if (updatedTrack.id === 'FLT-EK404' && simTimeRef.current >= 10 && updatedTrack.type !== 'SUSPECT' && updatedTrack.type !== 'HOSTILE') {
+             updatedTrack.type = 'SUSPECT';
+             updatedTrack.threatName = 'HIJACK';
+          }
+
           if (updatedTrack.type === 'PENDING' || updatedTrack.type === 'UNKNOWN') {
             if (updatedTrack.category === 'TBM' || updatedTrack.category === 'ROCKET' || updatedTrack.category === 'CM') {
                updatedTrack.type = 'HOSTILE';
@@ -1658,7 +1740,29 @@ export default function App() {
                                                 // 5. Leaker Detection (Impacts on Dubai)
                                                 const impactedTracks: { trackId: string, assetId: string | null, damage: number, x: number, y: number }[] = [];
                                                 nextTracks.forEach(t => {
-                                                  if (t.type === 'HOSTILE' || t.type === 'SUSPECT') {
+                                                  // DO NOT process impacts for tracks that were just destroyed by an interceptor
+                                                  const isDestroyedThisSweep = t.interceptors && t.interceptors.some(i => i.isPkHit && sweepSimTime >= (i.engagementTime + i.interceptDuration));
+                                                  
+                                                  // Special case: FLT-EK404 or UAE-992 landing safely, not a leaker
+                                                  if (!isDestroyedThisSweep && (t.id === 'FLT-EK404' || t.id === 'UAE-992' || t.id === 'BAW-107') && t.alt <= 100) {
+                                                    const targetX = t.targetWaypoint ? t.targetWaypoint.x : (t.id === 'FLT-EK404' ? 60 : BATTERY_POS.x);
+                                                    const targetY = t.targetWaypoint ? t.targetWaypoint.y : (t.id === 'FLT-EK404' ? 46 : BATTERY_POS.y);
+                                                    const distToTarget = calculateRange(t.x, t.y, targetX, targetY);
+                                                    
+                                                    // Only counts as landed if it reached the airport
+                                                    if (distToTarget < 2.0) {
+                                                      impactedTracks.push({ trackId: t.id, assetId: null, damage: 0, x: t.x, y: t.y });
+                                                      events.push({ type: 'LANDED', trackId: t.id } as any);
+                                                      return;
+                                                    } else if (t.id === 'FLT-EK404') {
+                                                      // It crashed short of the runway
+                                                      impactedTracks.push({ trackId: t.id, assetId: null, damage: 100, x: t.x, y: t.y });
+                                                      events.push({ type: 'CRASH', trackId: t.id, x: t.x, y: t.y } as any);
+                                                      return;
+                                                    }
+                                                  }
+
+                                                  if (!isDestroyedThisSweep && (t.type === 'HOSTILE' || t.type === 'SUSPECT')) {
                                                     let hitAsset = false;
                                                     for (const assetId in assetsRef.current) {
                                                       const asset = assetsRef.current[assetId];
@@ -1684,7 +1788,7 @@ export default function App() {
                                                       const tgtX = t.targetWaypoint ? t.targetWaypoint.x : BATTERY_POS.x;
                                                       const tgtY = t.targetWaypoint ? t.targetWaypoint.y : BATTERY_POS.y;
                                                       
-                                                      const isBallisticGroundHit = (t.category === 'TBM' || t.category === 'ROCKET') && t.alt <= 100;
+                                                      const isBallisticGroundHit = (t.category === 'TBM' || t.category === 'ROCKET') && t.alt <= 100 && calculateRange(t.x, t.y, tgtX, tgtY, 0, 0) < 2.0;
                                                       const isSteeredGroundHit = (t.category === 'CM' || t.category === 'UAS') && calculateRange(t.x, t.y, tgtX, tgtY) < 1.0;
                                                       
                                                       if (isBallisticGroundHit || isSteeredGroundHit) {
@@ -1717,10 +1821,10 @@ export default function App() {
         if (e.type === 'COST') addDefenseCost(e.amount!);
         if (e.type === 'AMRAAM_FIRED') incrementInterceptorsFired('AMRAAM');
         if (e.type === 'IMPACT') {
-          const { assetId, trackId, x, y } = e as any;
+          const { assetId, trackId, x, y, damage } = e as any;
           const asset = useTrackStore.getState().assets[assetId];
           
-          addLeaker();
+          addLeaker(damage, assetId);
           
           // Generate a ground splash
           setSplashes(prev => [...prev, { id: `impact-${Date.now()}-${Math.random()}`, x, y, time: Date.now() }]);
@@ -1732,15 +1836,28 @@ export default function App() {
           setSplashes(prev => [...prev, { id: `splash-${Date.now()}-${Math.random()}`, x: (e as any).x, y: (e as any).y, time: Date.now() }]);
         }
         if ((e as any).type === 'GROUND_IMPACT') {
-          const { x, y, trackId, isPopulated } = e as any;
+          const { x, y, trackId, isPopulated, damage } = e as any;
           if (isPopulated) {
             addLog(`WARNING: ${trackId} IMPACTED WITHIN METROPOLITAN AREA.`, 'ALERT');
             // We'll also count this as a leaker for the final score, since the goal is to protect the city
-            addLeaker();
+            addLeaker(damage);
           } else {
             addLog(`IMPACT: ${trackId} DETONATED IN UNPOPULATED TERRAIN.`, 'INFO');
           }
           setSplashes(prev => [...prev, { id: `ground-${Date.now()}-${Math.random()}`, x, y, time: Date.now() }]);
+        }
+        if ((e as any).type === 'LANDED') {
+          const { trackId } = e as any;
+          if (trackId === 'FLT-EK404') {
+             addLog(`${trackId} LANDED SECURELY AT DXB. HIJACKERS APPREHENDED.`, 'INFO');
+          } else {
+             addLog(`${trackId} LANDED SECURELY.`, 'INFO');
+          }
+        }
+        if ((e as any).type === 'CRASH') {
+          const { trackId, x, y } = e as any;
+          addLog(`CRITICAL: ${trackId} CRASHED SHORT OF RUNWAY. MASS CASUALTIES.`, 'ALERT');
+          setSplashes(prev => [...prev, { id: `crash-${Date.now()}-${Math.random()}`, x, y, time: Date.now(), isCrash: true }]);
         }
       });
     }, 3000);
@@ -1757,8 +1874,6 @@ export default function App() {
   const hasDragged = useRef(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const initialPointerDownRef = useRef<{ x: number, y: number } | null>(null);
-  const velocityRef = useRef<{ vx: number, vy: number, lastTime: number, lastX: number, lastY: number }>({ vx: 0, vy: 0, lastTime: 0, lastX: 0, lastY: 0 });
-  const inertiaRafRef = useRef<number | null>(null);
 
   const getMapCoords = useCallback((e: React.PointerEvent | PointerEvent | { clientX: number, clientY: number }, container: HTMLDivElement | SVGSVGElement | Element) => {
     const svg = container instanceof SVGSVGElement ? container : container.querySelector('svg');
@@ -1774,14 +1889,6 @@ export default function App() {
     activePointers.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
     hasDragged.current = false;
     initialPointerDownRef.current = { x: e.clientX, y: e.clientY };
-    
-    // Stop any existing inertia
-    if (inertiaRafRef.current) {
-      cancelAnimationFrame(inertiaRafRef.current);
-      inertiaRafRef.current = null;
-    }
-    
-    velocityRef.current = { vx: 0, vy: 0, lastTime: performance.now(), lastX: e.clientX, lastY: e.clientY };
 
     const coords = getMapCoords(e, e.currentTarget);
 
@@ -1805,17 +1912,16 @@ export default function App() {
             setIsSelecting(true);
             setIsDragging(false);
             setSelectionPolygon([{ x: coords.x, y: coords.y }]);
-            // Optional: provide haptic feedback if supported by browser
-            if (navigator.vibrate) navigator.vibrate(50);
-          }
-        }, 400);
-
-        setIsDragging(true);
-        setDragStart({ x: e.clientX, y: e.clientY });
-        setFollowedTrackId(null);
-      }
-    } else if (activePointers.current.size === 2) {
-      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                    // Optional: provide haptic feedback if supported by browser
+                    if (navigator.vibrate) navigator.vibrate(50);
+                  }
+                }, 400);
+            
+                setIsDragging(true);
+                dragStartRef.current = { x: e.clientX, y: e.clientY };
+                setFollowedTrackId(null);
+              }
+            } else if (activePointers.current.size === 2) {      if (longPressTimer.current) clearTimeout(longPressTimer.current);
       setIsDragging(false);
       setIsSelecting(false);
       setSelectionPolygon([]);
@@ -1863,8 +1969,8 @@ export default function App() {
       const viewBoxHeight = 100 / camera.zoom;
       const scale = Math.max(viewBoxWidth / rect.width, viewBoxHeight / rect.height);
       
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
 
       if (initialPointerDownRef.current) {
         const totalDx = e.clientX - initialPointerDownRef.current.x;
@@ -1874,17 +1980,6 @@ export default function App() {
           if (longPressTimer.current) clearTimeout(longPressTimer.current);
         }
       }
-      
-      // Calculate velocity
-      const now = performance.now();
-      const dt = now - velocityRef.current.lastTime;
-      if (dt > 0) {
-        velocityRef.current.vx = (e.clientX - velocityRef.current.lastX) / dt;
-        velocityRef.current.vy = (e.clientY - velocityRef.current.lastY) / dt;
-      }
-      velocityRef.current.lastTime = now;
-      velocityRef.current.lastX = e.clientX;
-      velocityRef.current.lastY = e.clientY;
 
       setCamera(prev => {
         let newX = prev.x - dx * scale;
@@ -1896,7 +1991,7 @@ export default function App() {
 
         return { ...prev, x: newX, y: newY };
       });
-      setDragStart({ x: e.clientX, y: e.clientY });
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
     } else if (activePointers.current.size === 2) {
       const pointers = Array.from(activePointers.current.values()) as {clientX: number, clientY: number}[];
       const currentDist = Math.hypot(pointers[0].clientX - pointers[1].clientX, pointers[0].clientY - pointers[1].clientY);
@@ -1906,7 +2001,7 @@ export default function App() {
         const zoomDelta = delta * 0.005;
         
         setCamera(prev => {
-          const newZoom = Math.min(10, Math.max(0.5, prev.zoom + zoomDelta));
+          const newZoom = Math.max(0.2, Math.min(100, prev.zoom + zoomDelta));
           return { ...prev, zoom: newZoom };
         });
       }
@@ -1925,7 +2020,7 @@ export default function App() {
 
     if (activePointers.current.size === 1) {
       const remainingPointer = Array.from(activePointers.current.values())[0] as {clientX: number, clientY: number};
-      setDragStart({ x: remainingPointer.clientX, y: remainingPointer.clientY });
+      dragStartRef.current = { x: remainingPointer.clientX, y: remainingPointer.clientY };
     }
 
     if (draggingWaypointId) {
@@ -1933,131 +2028,80 @@ export default function App() {
       return;
     }
 
-    if (isSelecting && selectionPolygon.length > 0) {
-      const lastSweepTime = useTrackStore.getState().lastSweepTime;
-      const elapsed = (nowStore.now - lastSweepTime) / 1000;
+    if (e.type === 'pointerup') {
+      if (isSelecting && selectionPolygon.length > 0) {
+        const lastSweepTime = useTrackStore.getState().lastSweepTime;
+        const elapsed = (nowStore.now - lastSweepTime) / 1000;
 
-      // Ray-casting algorithm to determine if a point is inside a polygon
-      const isPointInPolygon = (x: number, y: number, polygon: {x: number, y: number}[]) => {
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-          const xi = polygon[i].x, yi = polygon[i].y;
-          const xj = polygon[j].x, yj = polygon[j].y;
+        // Ray-casting algorithm to determine if a point is inside a polygon
+        const isPointInPolygon = (x: number, y: number, polygon: {x: number, y: number}[]) => {
+          let inside = false;
+          for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i].x, yi = polygon[i].y;
+            const xj = polygon[j].x, yj = polygon[j].y;
+            
+            const intersect = ((yi > y) !== (yj > y))
+                && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+          }
+          return inside;
+        };
+
+        const inLasso = useTrackStore.getState().getAllTracks()
+          .filter(t => t.detected !== false)
+          .filter(t => {
+            const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+            const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+            return isPointInPolygon(smoothX, smoothY, selectionPolygon);
+          })
+          .map(t => t.id);
+
+        if (inLasso.length > 0) {
+          // If they drew a polygon with only 1 point (a tap), don't treat it as a group hook
+          if (selectionPolygon.length > 2) {
+              setHookedTrackIds(prev => e.shiftKey ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
+              addLog(`GROUP HOOK: ${inLasso.length} TRACKS SELECTED`, 'INFO');
+          }
+        } else if (!e.shiftKey && selectionPolygon.length > 2) {
+          setHookedTrackIds([]);
+        }
+      } 
+      
+      // Only fire single tap selection if they didn't drag AND they didn't draw a multi-point lasso
+      // (A tap often registers as a 1 or 2 point polygon due to minor finger roll)
+      if (!hasDragged.current && activePointers.current.size === 0 && (!isSelecting || selectionPolygon.length <= 3)) {
+        // Handle single tap selection
+        const coords = getMapCoords(e, e.currentTarget);
+        const lastSweepTime = useTrackStore.getState().lastSweepTime;
+        const elapsed = (nowStore.now - lastSweepTime) / 1000;
+        // Drastically increase hit target for single taps to make it forgiving
+        const CLICK_RADIUS = Math.max(3.5, 6000 / (window.innerWidth * camera.zoom));
+
+        const nearbyTracks = useTrackStore.getState().getAllTracks()
+          .filter(t => t.detected !== false)
+          .filter(t => {
+            const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+            const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
+            return calculateRange(smoothX, smoothY, coords.x, coords.y) <= CLICK_RADIUS;
+          });
+
+        if (nearbyTracks.length > 0) {
+          const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
+          const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
           
-          const intersect = ((yi > y) !== (yj > y))
-              && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-          if (intersect) inside = !inside;
-        }
-        return inside;
-      };
-
-      const inLasso = useTrackStore.getState().getAllTracks()
-        .filter(t => t.detected !== false)
-        .filter(t => {
-          const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-          const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-          return isPointInPolygon(smoothX, smoothY, selectionPolygon);
-        })
-        .map(t => t.id);
-
-      if (inLasso.length > 0) {
-        // If they drew a polygon with only 1 point (a tap), don't treat it as a group hook
-        if (selectionPolygon.length > 2) {
-            setHookedTrackIds(prev => e.shiftKey ? Array.from(new Set([...prev, ...inLasso])) : inLasso);
-            addLog(`GROUP HOOK: ${inLasso.length} TRACKS SELECTED`, 'INFO');
-        }
-      } else if (!e.shiftKey && selectionPolygon.length > 2) {
-        setHookedTrackIds([]);
-      }
-    } 
-    
-    // Only fire single tap selection if they didn't drag AND they didn't draw a multi-point lasso
-    // (A tap often registers as a 1 or 2 point polygon due to minor finger roll)
-    if (!hasDragged.current && activePointers.current.size === 0 && (!isSelecting || selectionPolygon.length <= 3)) {
-      // Handle single tap selection
-      const coords = getMapCoords(e, e.currentTarget);
-      const lastSweepTime = useTrackStore.getState().lastSweepTime;
-      const elapsed = (nowStore.now - lastSweepTime) / 1000;
-      // Drastically increase hit target for single taps to make it forgiving
-      const CLICK_RADIUS = Math.max(3.5, 6000 / (window.innerWidth * camera.zoom));
-
-      const nearbyTracks = useTrackStore.getState().getAllTracks()
-        .filter(t => t.detected !== false)
-        .filter(t => {
-          const smoothX = t.x + Math.sin(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-          const smoothY = t.y - Math.cos(t.hdg * Math.PI / 180) * ((t.spd / 3600) * elapsed);
-          return calculateRange(smoothX, smoothY, coords.x, coords.y) <= CLICK_RADIUS;
-        });
-
-      if (nearbyTracks.length > 0) {
-        const currentSingleHook = hookedTrackIds.length === 1 ? hookedTrackIds[0] : null;
-        const currentIndex = nearbyTracks.findIndex(t => t.id === currentSingleHook);
-        
-        if (currentIndex !== -1 && nearbyTracks.length > 1) {
-          const nextIndex = (currentIndex + 1) % nearbyTracks.length;
-          setHookedTrackIds([nearbyTracks[nextIndex].id]);
+          if (currentIndex !== -1 && nearbyTracks.length > 1) {
+            const nextIndex = (currentIndex + 1) % nearbyTracks.length;
+            setHookedTrackIds([nearbyTracks[nextIndex].id]);
+          } else {
+            setHookedTrackIds([nearbyTracks[0].id]);
+          }
         } else {
-          setHookedTrackIds([nearbyTracks[0].id]);
+          setHookedTrackIds([]);
         }
-      } else {
-        setHookedTrackIds([]);
       }
     }
 
     if (activePointers.current.size === 0) {
-      if (isDragging && hasDragged.current) {
-        // Apply Inertia
-        const now = performance.now();
-        const dt = now - velocityRef.current.lastTime;
-        
-        // Only apply inertia if the last movement was very recent (a flick, not a stop-then-release)
-        if (dt < 100) {
-          const startVelocityX = velocityRef.current.vx;
-          const startVelocityY = velocityRef.current.vy;
-          const speed = Math.hypot(startVelocityX, startVelocityY);
-          
-          if (speed > 0.5) { // Minimum flick speed threshold
-            const viewBoxWidth = 100 / camera.zoom;
-            const viewBoxHeight = 100 / camera.zoom;
-            // Need to pass in the current container rect, but we can't easily get it here.
-            // We'll estimate scale based on window size for the inertia.
-            const scale = Math.max(viewBoxWidth / window.innerWidth, viewBoxHeight / window.innerHeight);
-
-            let currentVx = startVelocityX * scale;
-            let currentVy = startVelocityY * scale;
-            let lastFrameTime = performance.now();
-
-            const applyInertia = () => {
-              const currentFrameTime = performance.now();
-              const frameDt = currentFrameTime - lastFrameTime;
-              lastFrameTime = currentFrameTime;
-
-              setCamera(prev => {
-                let newX = prev.x - currentVx * frameDt;
-                let newY = prev.y - currentVy * frameDt;
-
-                // Soft bounds checking
-                newX = Math.max(-50, Math.min(150, newX));
-                newY = Math.max(-50, Math.min(150, newY));
-
-                return { ...prev, x: newX, y: newY };
-              });
-
-              // Friction multiplier (e.g., 0.95 means it keeps 95% of its speed each frame)
-              currentVx *= 0.92;
-              currentVy *= 0.92;
-
-              if (Math.abs(currentVx) > 0.001 || Math.abs(currentVy) > 0.001) {
-                inertiaRafRef.current = requestAnimationFrame(applyInertia);
-              } else {
-                inertiaRafRef.current = null;
-              }
-            };
-            inertiaRafRef.current = requestAnimationFrame(applyInertia);
-          }
-        }
-      }
-
       setIsDragging(false);
       setIsSelecting(false);
       setSelectionPolygon([]);
@@ -2070,7 +2114,7 @@ export default function App() {
     setCamera(prev => {
       let newZoom = prev.zoom;
       if (e.deltaY < 0) {
-        newZoom = Math.min(10, prev.zoom * zoomFactor);
+        newZoom = Math.min(100, prev.zoom * zoomFactor);
       } else {
         newZoom = Math.max(0.2, prev.zoom / zoomFactor);
       }
@@ -2389,11 +2433,21 @@ export default function App() {
           {vectoringTrackId && <GhostVectorLine vectoringTrackId={vectoringTrackId} cameraZoom={camera.zoom} />}
 
           {/* Render Splashes */}
-          {splashes.map(s => (
+          {splashes.map((s: any) => (
             <g key={s.id} transform={`translate(${s.x}, ${s.y})`}>
-              <circle r={0.8 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" style={{ animationIterationCount: 1, animationFillMode: 'forwards' }} />
-              <line x1={-0.4 / camera.zoom} y1={-0.4 / camera.zoom} x2={0.4 / camera.zoom} y2={0.4 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
-              <line x1={0.4 / camera.zoom} y1={-0.4 / camera.zoom} x2={-0.4 / camera.zoom} y2={0.4 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
+              {s.isCrash ? (
+                <>
+                  <line x1={-1.5 / camera.zoom} y1={-1.5 / camera.zoom} x2={1.5 / camera.zoom} y2={1.5 / camera.zoom} stroke="#FF0033" strokeWidth={0.4 / camera.zoom} />
+                  <line x1={1.5 / camera.zoom} y1={-1.5 / camera.zoom} x2={-1.5 / camera.zoom} y2={1.5 / camera.zoom} stroke="#FF0033" strokeWidth={0.4 / camera.zoom} />
+                  <circle r={2.0 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" style={{ animationIterationCount: 1, animationFillMode: 'forwards' }} />
+                </>
+              ) : (
+                <>
+                  <circle r={0.8 / camera.zoom} fill="none" stroke="#FF0033" strokeWidth={0.2 / camera.zoom} className="animate-ping" style={{ animationIterationCount: 1, animationFillMode: 'forwards' }} />
+                  <line x1={-0.4 / camera.zoom} y1={-0.4 / camera.zoom} x2={0.4 / camera.zoom} y2={0.4 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
+                  <line x1={0.4 / camera.zoom} y1={-0.4 / camera.zoom} x2={-0.4 / camera.zoom} y2={0.4 / camera.zoom} stroke="#FF0033" strokeWidth={0.2 / camera.zoom} />
+                </>
+              )}
             </g>
           ))}
 
@@ -2563,7 +2617,7 @@ export default function App() {
             {/* Mobile Huntress Snippet */}
             {!mobileSheetOpen && (
               <div className="fixed lg:hidden bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-[calc(50vw+3rem)] pointer-events-none z-40 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pb-4 flex flex-col justify-end overflow-hidden">
-                {logs.filter(l => l.message.startsWith('HUNTRESS:') || l.message.startsWith('ATC:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT').slice(0, 1).map(log => (
+                {logs.filter(l => !l.message.startsWith('FALCON') && !l.message.startsWith('ATC:') && (l.message.startsWith('HUNTRESS:') || l.message.startsWith('INTEL:') || l.type === 'WARN' || l.type === 'ALERT')).slice(0, 1).map(log => (
                   <div 
                     key={`snippet-${log.id}`} 
                     className={`pointer-events-auto cursor-pointer bg-gradient-to-r from-[#220000]/90 to-transparent p-2 transition-all duration-1000 transform ${visibleSnippetId === log.id ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`} 
@@ -2606,10 +2660,21 @@ export default function App() {
                   else if (t.type === 'SUSPECT') color = '#FF8800';
 
                   return (
-                    <div className="p-2">
-                      <div className="text-[8px] font-bold tracking-widest mb-0.5" style={{ color }}>{t.type}</div>
-                      <div className="text-[9px] font-bold text-white line-clamp-1">{t.threatName || t.id}</div>
-                      <div className="text-[9px] text-[#00E5FF]/80 line-clamp-1">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : `${Math.round(t.alt)} FT`} / {Math.round(t.spd)} KTS</div>
+                    <div className="p-3">
+                      <div className="text-[10px] font-bold tracking-widest mb-1" style={{ color }}>{t.type}</div>
+                      <div className="text-xs font-bold text-white line-clamp-1">{t.threatName || t.id}</div>
+                      <div className="text-[10px] text-[#00E5FF]/80 line-clamp-1 mt-0.5">{t.alt >= 18000 ? `FL${Math.round(t.alt/100)}` : `${Math.round(t.alt)} FT`} / {Math.round(t.spd)} KTS</div>
+                      {t.interceptors && t.interceptors.length > 0 && (
+                        <div className="mt-2 border-t border-[#FF0033]/30 pt-1.5">
+                          {(() => {
+                            const sorted = [...t.interceptors].sort((a, b) =>
+                              (a.engagementTime + a.interceptDuration) - (b.engagementTime + b.interceptDuration)
+                            );
+                            const i = sorted[0];
+                            return <LiveEngagementTextSingle interceptor={i} compact={true} />;
+                          })()}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

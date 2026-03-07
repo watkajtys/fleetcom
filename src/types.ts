@@ -30,6 +30,8 @@ export interface Track {
   alt: number; // feet
   spd: number; // knots
   hdg: number; // degrees
+  targetHdg?: number;
+  targetSpd?: number;
   category: TrackCategory;
   history: {x: number, y: number}[];
   iffInterrogated: boolean;

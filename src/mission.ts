@@ -1,6 +1,7 @@
 import { Track, TrackCategory, TrackType } from './types';
 import { BATTERY_POS, DEFENDED_ASSETS } from './constants';
 import { calculateBearing } from './utils';
+import { useTrackStore } from './store';
 
 let trackIdCounter = 100;
 
@@ -89,6 +90,7 @@ export interface MissionEvent {
   message: string;
   type: 'INFO' | 'WARN' | 'ALERT' | 'ACTION';
   generateTracks: () => Track[];
+  action?: () => void;
 }
 
 export const MISSION_STEPS: MissionEvent[] = [
@@ -96,9 +98,7 @@ export const MISSION_STEPS: MissionEvent[] = [
     time: 10,
     message: 'ATC: FLIGHT EK404 SQUAWKING 7500. DEVIATING FROM ASSIGNED FLIGHT PATH. INTENTIONS UNKNOWN.',
     type: 'WARN',
-    generateTracks: () => [
-      { ...createCrossingTrack('UNKNOWN', 'FW', 20, 25, 120, 500, 31000), id: 'FLT-EK404' }
-    ]
+    generateTracks: () => [] // It's already in the sim from INITIAL_TRACKS, the simulation loop will take over its hijack profile
   },
   {
     time: 20,
@@ -123,8 +123,29 @@ export const MISSION_STEPS: MissionEvent[] = [
     ]
   },
   {
+    time: 35,
+    message: 'HUNTRESS: WARNING RED. SYSTEM DETECTING MULTIPLE LAUNCH SIGNATURES FROM NORTHERN SECTOR.',
+    type: 'ALERT',
+    generateTracks: () => []
+  },
+  {
+    time: 37,
+    message: 'HUNTRESS: ALL UNITS WCS SET TO FREE. AUTO-ENGAGEMENT DOCTRINE AUTHORIZED.',
+    type: 'ACTION',
+    generateTracks: () => [],
+    action: () => {
+      useTrackStore.getState().setWcs('FREE');
+      useTrackStore.getState().setDoctrine({
+        autoEngageTBM: true,
+        autoEngageCM: true,
+        autoEngageUAS: true,
+        autoEngageRocket: true
+      });
+    }
+  },
+  {
     time: 40,
-    message: 'WARNING RED. MULTIPLE MRBM TRACKS DETECTED. EVALUATED HOSTILE. FALLING THROUGH FL1500. IMPACT DUBAI 90 SECONDS.',
+    message: 'INTEL: TBM LAUNCH CONFIRMED. IMPACT DUBAI 90 SECONDS.',
     type: 'ALERT',
     generateTracks: () => Array.from({length: 3}).map(() => createTargetTrack(
       'PENDING', 'TBM',
@@ -136,6 +157,73 @@ export const MISSION_STEPS: MissionEvent[] = [
     ))
   },
   {
+    time: 42,
+    message: 'HUNTRESS: DECLARING AIRSPACE EMERGENCY. ALL SECTORS INITIATE IMMEDIATE CIVILIAN DIVERT.',
+    type: 'WARN',
+    generateTracks: () => []
+  },
+  {
+    time: 43,
+    message: 'ATC: ALL AIRCRAFT ON GUARD. DUBAI AIRSPACE IS CLOSED. STANDBY FOR EMERGENCY VECTORS.',
+    type: 'WARN',
+    generateTracks: () => []
+  },
+  {
+    time: 45,
+    message: 'ATC: EMIRATES 551, EMERGENCY VECTOR, IMMEDIATE RIGHT TURN HEADING 180. EXPEDITE CLIMB.',
+    type: 'INFO',
+    generateTracks: () => [],
+    action: () => {
+      useTrackStore.getState().updateTrack('ETD-551', t => ({ targetHdg: 180, targetSpd: 450 }));
+    }
+  },
+  {
+    time: 48,
+    message: 'ATC: FLYDUBAI 22, IMMEDIATE LEFT TURN HEADING 180. EXPEDITE TO FL250.',
+    type: 'INFO',
+    generateTracks: () => [],
+    action: () => {
+      useTrackStore.getState().updateTrack('FDB-22', t => ({ targetHdg: 180, targetSpd: 450 }));
+    }
+  },
+  {
+    time: 51,
+    message: 'ATC: TURKISH 418, EXECUTE EMERGENCY RIGHT TURN HEADING 120. DIVERT TO MUSCAT.',
+    type: 'INFO',
+    generateTracks: () => [],
+    action: () => {
+      useTrackStore.getState().updateTrack('THY-418', t => ({ targetHdg: 120, targetSpd: 500 }));
+    }
+  },
+  {
+    time: 54,
+    message: 'ATC: QANTAS 9, EXECUTE EMERGENCY LEFT TURN HEADING 270 IMMEDIATELY.',
+    type: 'INFO',
+    generateTracks: () => [],
+    action: () => {
+      useTrackStore.getState().updateTrack('QFA-9', t => ({ targetHdg: 270, targetSpd: 500 }));
+    }
+  },
+        {
+          time: 57,
+          message: 'ATC: ALL OTHER SECTORS (QTR-115, SIA-322, AIC-121), EXECUTE IMMEDIATE RIGHT TURN HEADING 270. CLEAR THE AREA.',  
+          type: 'INFO',
+          generateTracks: () => [],
+          action: () => {
+            useTrackStore.getState().updateTrack('QTR-115', t => ({ targetHdg: 270, targetSpd: 520 }));
+            useTrackStore.getState().updateTrack('SIA-322', t => ({ targetHdg: 270, targetSpd: 520 }));
+            useTrackStore.getState().updateTrack('AIC-121', t => ({ targetHdg: 270, targetSpd: 520 }));
+          }
+        },    {
+      time: 60,
+      message: 'ATC: UAE-992, BAW-107, CLEARED TO LAND IMMEDIATELY.',
+      type: 'INFO',
+      generateTracks: () => [],
+      action: () => {
+        useTrackStore.getState().updateTrack('UAE-992', t => ({ alt: 0, spd: 0 }));
+        useTrackStore.getState().updateTrack('BAW-107', t => ({ alt: 0, spd: 0 }));
+      }
+    },  {
     time: 70,
     message: 'HUNTRESS: MULTI-DOMAIN ATTACK DETECTED. UAS SWARM INTERMIXED WITH SEA-SKIMMING CRUISE MISSILES INBOUND FROM THE GULF.',
     type: 'ALERT',
@@ -168,7 +256,13 @@ export const MISSION_STEPS: MissionEvent[] = [
   },
   {
     time: 130,
-    message: 'HUNTRESS: ANOTHER SWARM OF FAST MOVERS COMING OVER THE HAJAR MOUNTAINS. THIS IS ESCALATING BIG, BIG TIME.',
+    message: 'HUNTRESS: ANOTHER SWARM OF FAST MOVERS COMING OVER THE HAJAR MOUNTAINS.',
+    type: 'ALERT',
+    generateTracks: () => []
+  },
+  {
+    time: 134,
+    message: 'HUNTRESS: THIS IS ESCALATING BIG, BIG TIME.',
     type: 'ALERT',
     generateTracks: () => []
   },

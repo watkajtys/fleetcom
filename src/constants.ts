@@ -33,12 +33,18 @@ export const INITIAL_TRACKS: Track[] = [
   { id: 'ETD-551', type: 'ASSUMED_FRIEND', x: 42, y: 65, alt: 8500, spd: 280, hdg: 280, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // High-Altitude Corridor (Link-16 Datalink Tracks)
-  { id: 'QTR-115', type: 'ASSUMED_FRIEND', x: 40, y: 45, alt: 38000, spd: 480, hdg: 135, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
-  { id: 'BAW-107', type: 'ASSUMED_FRIEND', x: 60, y: 40, alt: 36000, spd: 470, hdg: 225, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'QTR-115', type: 'ASSUMED_FRIEND', x: 0, y: 0, alt: 38000, spd: 480, hdg: 135, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'BAW-107', type: 'ASSUMED_FRIEND', x: 75, y: 30, alt: 8000, spd: 250, hdg: 225, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'SIA-322', type: 'ASSUMED_FRIEND', x: 10, y: 15, alt: 35000, spd: 460, hdg: 120, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'THY-418', type: 'ASSUMED_FRIEND', x: -20, y: -20, alt: 33000, spd: 490, hdg: 300, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'QFA-9',   type: 'ASSUMED_FRIEND', x: 5, y: 10, alt: 37000, spd: 450, hdg: 300, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Local Vectoring: FDB-22 assigned to a specific heading/altitude
-  { id: 'FDB-22', type: 'ASSUMED_FRIEND', x: 45, y: 55, alt: 14000, spd: 320, hdg: 45, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'FDB-22', type: 'ASSUMED_FRIEND', x: 35, y: 75, alt: 14000, spd: 320, hdg: 45, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Distant Traffic
-  { id: 'AIC-121', type: 'ASSUMED_FRIEND', x: 35, y: 50, alt: 34000, spd: 450, hdg: 90, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  { id: 'AIC-121', type: 'ASSUMED_FRIEND', x: 15, y: 60, alt: 34000, spd: 450, hdg: 90, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  
+  // Normal flight that gets hijacked later
+  { id: 'FLT-EK404', type: 'ASSUMED_FRIEND', x: 20, y: 25, alt: 31000, spd: 500, hdg: 300, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
 ];

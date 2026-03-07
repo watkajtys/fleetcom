@@ -69,7 +69,7 @@ export const processFighters = (
     t.category !== 'ROCKET' &&
     (!t.interceptors || t.interceptors.length === 0)
   );
-  const unknowns = tracks.filter(t => (t.type === 'UNKNOWN' || t.type === 'PENDING' || t.type === 'SUSPECT') && !t.iffInterrogated);
+  const unknowns = tracks.filter(t => !t.iffInterrogated && !t.isFighter);
   
   // Spatial Indexing for fast neighbor lookups
   const MAX_DETECT_RANGE = 250; // Increased from 50 to 250 to allow AWACS/L16 intercept vectoring across the entire theater
@@ -92,17 +92,33 @@ export const processFighters = (
       if (calculateRange(track.x, track.y, u.x, u.y, track.alt, u.alt) < 20.0) {
         const uInNext = trackMap.get(u.id); // O(1) lookup
         if (uInNext && !uInNext.iffInterrogated) {
-          const threatName = uInNext.id === 'FLT-EK404' ? 'HIJACK' : getThreatName(uInNext.category);
+          const isHijack = uInNext.id === 'FLT-EK404';
+          const isCivilian = !isHijack && (uInNext.category === 'FW' || uInNext.category === 'RW') && uInNext.type !== 'HOSTILE' && uInNext.spd > 250 && uInNext.alt > 10000;
+
+          const threatName = isHijack ? 'HIJACK' : (isCivilian ? 'CIVILIAN' : getThreatName(uInNext.category));
           
-          let threatType: 'SUSPECT' | 'HOSTILE' = 'HOSTILE';
-          if (uInNext.id === 'FLT-EK404') threatType = 'SUSPECT';
-          else if (uInNext.category === 'FW' || uInNext.category === 'RW' || uInNext.category === 'UAS') threatType = 'SUSPECT'; // Manned aircraft & drones are suspect until declared
+          let threatType = uInNext.type;
+          let logType: 'INFO' | 'WARN' | 'ALERT' = 'ALERT';
+
+          if (isHijack) {
+            threatType = 'SUSPECT';
+          } else if (isCivilian || uInNext.type === 'FRIEND' || uInNext.type === 'ASSUMED_FRIEND' || uInNext.type === 'NEUTRAL') {
+             threatType = isCivilian ? 'FRIEND' : uInNext.type; // Force sweet/civilians to FRIEND
+             logType = 'INFO';
+          } else if (uInNext.category === 'FW' || uInNext.category === 'RW' || uInNext.category === 'UAS') {
+             threatType = 'SUSPECT';
+             if (uInNext.category === 'UAS') logType = 'ALERT'; // Elevate UAS VID to ALERT
+          } else {
+             threatType = 'HOSTILE';
+          }
           
           uInNext.iffInterrogated = true;
           // Hardening: Preserve manual HOSTILE status
           if (uInNext.type !== 'HOSTILE') uInNext.type = threatType;
           uInNext.threatName = threatName;
-          events.push({ type: 'LOG', message: `${track.id}: TRACK ${u.id} VID ${threatName}.`, logType: 'ALERT' });
+          
+          // Use FALCON prefix to avoid Huntress popups for routine VIDs
+          events.push({ type: 'LOG', message: `${track.id}: VID TRACK ${u.id} - ${threatName}.`, logType });
         }
       }
     });
