@@ -62,8 +62,8 @@ export interface SystemLog {
 }
 
 export interface EngagementDoctrine {
-  autoEngageTBM: boolean;
-  autoEngageCM: boolean;
-  autoEngageUAS: boolean;
-  autoEngageRocket: boolean;
+  autoEngageTBM: 0 | 1 | 2;
+  autoEngageCM: 0 | 1 | 2;
+  autoEngageUAS: 0 | 1 | 2;
+  autoEngageRocket: 0 | 1 | 2;
 }

@@ -59,7 +59,7 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     enemyCost: 0,
     wcs: 'TIGHT',
     setWcs: (wcs) => set({ wcs }),
-    doctrine: { autoEngageTBM: false, autoEngageCM: false, autoEngageUAS: false, autoEngageRocket: false },
+    doctrine: { autoEngageTBM: 0, autoEngageCM: 0, autoEngageUAS: 0, autoEngageRocket: 0 },
     setDoctrine: (doctrine) => set({ doctrine }),
 
     setTracks: (updater, currentSimTime) => {

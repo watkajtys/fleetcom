@@ -13,7 +13,7 @@ export const getThreatName = (category: TrackCategory) => {
 };
 
 export const FT_TO_NM = 1 / 6076.12;
-export const MACH_TO_NM_SEC = 0.181; // Mach 1 in NM/sec (approx 661 kts)
+export const MACH_TO_NM_SEC = 0.18374; // Mach 1 in NM/sec (approx 661.47 kts)
 
 export const calculateRange = (x1: number, y1: number, x2: number, y2: number, alt1: number = 0, alt2: number = 0) => {
   const dx = x1 - x2;
