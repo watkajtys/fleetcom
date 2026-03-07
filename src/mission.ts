@@ -220,8 +220,8 @@ export const MISSION_STEPS: MissionEvent[] = [
       type: 'INFO',
       generateTracks: () => [],
       action: () => {
-        useTrackStore.getState().updateTrack('UAE-992', t => ({ alt: 0, spd: 0 }));
-        useTrackStore.getState().updateTrack('BAW-107', t => ({ alt: 0, spd: 0 }));
+        useTrackStore.getState().updateTrack('UAE-992', t => ({ targetWaypoint: { x: 45, y: 67.5 } })); // DWC Airport
+        useTrackStore.getState().updateTrack('BAW-107', t => ({ targetWaypoint: { x: 60, y: 46 } })); // DXB Airport
       }
     },  {
     time: 70,

@@ -23,8 +23,8 @@ export const DEFENDED_ASSETS: DefendedAsset[] = [
 
 // Scenario: Worst-Case Complex Coordinated Attack on Dubai
 export const INITIAL_TRACKS: Track[] = [
-  // AWACS orbiting over inland UAE (High altitude, racetrack orbit)
-  { id: 'MAGIC-01', type: 'FRIEND', x: 60, y: 65, alt: 32000, spd: 350, hdg: 270, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
+  // AWACS orbiting over inland UAE (High altitude, racetrack orbit, looking North)
+  { id: 'MAGIC-01', type: 'FRIEND', x: 50, y: 150, alt: 35000, spd: 380, hdg: 90, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },
   
   // Arrival Flow: UAE-992 on final approach to DWC (DAL-1)
   { id: 'UAE-992', type: 'ASSUMED_FRIEND', x: 47, y: 68, alt: 3000, spd: 160, hdg: 315, category: 'FW', history: [], iffInterrogated: true, tq: 9, coasting: false, interceptors: [], sensor: 'L16', detected: true },

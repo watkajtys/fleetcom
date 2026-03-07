@@ -101,9 +101,8 @@ const getZuluTimeStr = (offsetMs: number = 0) => {
 const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showTti }: { interceptor: any, track: Track, color: string, cameraZoom: number, showTti: boolean }) => {
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
   
-  const tailLineRef = useRef<SVGLineElement>(null);
-  const pulseLineRef = useRef<SVGLineElement>(null);
-  const headCircleRef = useRef<SVGCircleElement>(null);
+  const speedLeaderRef = useRef<SVGLineElement>(null);
+  const headGroupRef = useRef<SVGGElement>(null);
   const textRef = useRef<SVGTextElement>(null);
 
   useEffect(() => {
@@ -118,9 +117,8 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
       const smoothTti = Math.max(0, interceptor.interceptTtl - elapsedSinceLastSweep);
 
       if (progress >= 1) {
-        if (tailLineRef.current) tailLineRef.current.style.display = 'none';
-        if (pulseLineRef.current) pulseLineRef.current.style.display = 'none';
-        if (headCircleRef.current) headCircleRef.current.style.display = 'none';
+        if (speedLeaderRef.current) speedLeaderRef.current.style.display = 'none';
+        if (headGroupRef.current) headGroupRef.current.style.display = 'none';
         if (textRef.current) textRef.current.style.display = 'none';
         return;
       }
@@ -136,12 +134,13 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
       const currentTargetX = track.x + sinH * (spdNmSec * elapsedSinceLastSweep);
       const currentTargetY = track.y - cosH * (spdNmSec * elapsedSinceLastSweep);
 
-      const remainingSecs = (interceptor.interceptDuration - elapsedSinceLaunch) / 1000;
-      const targetLeadX = currentTargetX + sinH * (spdNmSec * remainingSecs);
-      const targetLeadY = currentTargetY - cosH * (spdNmSec * remainingSecs);
+      // Use a pure pursuit curve to prevent snapback/teleporting caused by extrapolating jittery headings over long remaining times.
+      const visualProgress = Math.pow(progress, 0.8);
+      let missileX = startX + (currentTargetX - startX) * visualProgress;
+      let missileY = startY + (currentTargetY - startY) * visualProgress;
 
-      let missileX = startX + (targetLeadX - startX) * progress;
-      let missileY = startY + (targetLeadY - startY) * progress;
+      const targetLeadX = currentTargetX; // for distance calculations
+      const targetLeadY = currentTargetY;
 
       if (interceptor.isPkHit === false && progress > 0.85) {
         const missProgress = (progress - 0.85) / 0.15;
@@ -153,39 +152,33 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
 
       const dx = targetLeadX - missileX;
       const dy = targetLeadY - missileY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
       
-      const visualHeadLength = Math.min(2.0, dist * 0.5); 
-      const leadX = dist > 0 ? missileX + (dx / dist) * visualHeadLength : missileX;
-      const leadY = dist > 0 ? missileY + (dy / dist) * visualHeadLength : missileY;
-
-      if (tailLineRef.current) {
-        tailLineRef.current.style.display = '';
-        tailLineRef.current.setAttribute('x2', missileX.toString());
-        tailLineRef.current.setAttribute('y2', missileY.toString());
-      }
+      // Speed Leader (MIL-STD-2525): Line length represents velocity vector, not distance to target.
+      // E.g. A 10-second predictor line based on current speed.
+      const missileSpeedScale = 0.5; // Visual scalar for the leader line
+      const dirDist = Math.sqrt(dx * dx + dy * dy);
+      const leadX = dirDist > 0 ? missileX + (dx / dirDist) * missileSpeedScale : missileX;
+      const leadY = dirDist > 0 ? missileY + (dy / dirDist) * missileSpeedScale : missileY;
       
-      if (pulseLineRef.current) {
-        pulseLineRef.current.style.display = '';
-        pulseLineRef.current.setAttribute('x1', missileX.toString());
-        pulseLineRef.current.setAttribute('y1', missileY.toString());
-        pulseLineRef.current.setAttribute('x2', leadX.toString());
-        pulseLineRef.current.setAttribute('y2', leadY.toString());
+      if (speedLeaderRef.current) {
+        speedLeaderRef.current.style.display = '';
+        speedLeaderRef.current.setAttribute('x1', missileX.toString());
+        speedLeaderRef.current.setAttribute('y1', missileY.toString());
+        speedLeaderRef.current.setAttribute('x2', leadX.toString());
+        speedLeaderRef.current.setAttribute('y2', leadY.toString());
         
         if (interceptor.isPkHit === false && progress > 0.9) {
-          pulseLineRef.current.classList.remove('animate-pulse');
-          pulseLineRef.current.setAttribute('opacity', '0.3');
+          speedLeaderRef.current.setAttribute('opacity', '0.1');
         } else {
-          pulseLineRef.current.classList.add('animate-pulse');
-          pulseLineRef.current.setAttribute('opacity', '1.0');
+          speedLeaderRef.current.setAttribute('opacity', '0.6');
         }
       }
 
-      if (headCircleRef.current) {
-        headCircleRef.current.style.display = '';
-        headCircleRef.current.setAttribute('cx', missileX.toString());
-        headCircleRef.current.setAttribute('cy', missileY.toString());
-        headCircleRef.current.setAttribute('opacity', interceptor.isPkHit === false && progress > 0.95 ? '0.5' : '1.0');
+      if (headGroupRef.current) {
+        headGroupRef.current.style.display = '';
+        const angleDeg = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
+        headGroupRef.current.setAttribute('transform', `translate(${missileX}, ${missileY}) rotate(${angleDeg})`);
+        headGroupRef.current.setAttribute('opacity', interceptor.isPkHit === false && progress > 0.95 ? '0.5' : '1.0');
       }
 
       if (textRef.current && showTti) {
@@ -203,9 +196,11 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
 
   return (
     <g>
-      <line ref={tailLineRef} x1={interceptor.launchPos.x} y1={interceptor.launchPos.y} stroke={color} strokeWidth={0.1 / cameraZoom} strokeDasharray={`${0.2 / cameraZoom} ${0.4 / cameraZoom}`} opacity="0.4" style={{ display: 'none' }} />
-      <line ref={pulseLineRef} stroke={color} strokeWidth={0.2 / cameraZoom} className="animate-pulse" style={{ display: 'none' }} />
-      <circle ref={headCircleRef} r={0.3 / cameraZoom} fill={color} style={{ display: 'none' }} />
+      <line ref={speedLeaderRef} stroke={color} strokeWidth={0.2 / cameraZoom} opacity="0.6" style={{ display: 'none' }} />
+      <g ref={headGroupRef} style={{ display: 'none' }}>
+        {/* Simplified Chevron pointing "up" (along its rotated Y axis) */}
+        <path d={`M -${0.3 / cameraZoom} ${0.3 / cameraZoom} L 0 -${0.4 / cameraZoom} L ${0.3 / cameraZoom} ${0.3 / cameraZoom} L 0 0 Z`} fill={color} />
+      </g>
       {showTti && (
         <text ref={textRef} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" textAnchor="middle" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000', display: 'none' }}></text>
       )}
@@ -278,28 +273,37 @@ const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime,
     return nowStore.subscribeTime(() => {
       if (!lineRef.current) return;
       const age = nowStore.now - interceptor.engagementTime;
-      if (age > 1500 && !isHooked) {
+      const progress = Math.min(1, Math.max(0, age / interceptor.interceptDuration));
+      
+      if (progress >= 1 || (age > 1500 && !isHooked)) {
          lineRef.current.style.display = 'none';
          return;
       }
       lineRef.current.style.display = '';
+      
       const elapsed = (nowStore.now - lastSweepTime) / 1000;
       const rad = track.hdg * (Math.PI / 180);
       const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
       const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
-      lineRef.current.setAttribute('x2', smoothX.toString());
-      lineRef.current.setAttribute('y2', smoothY.toString());
+      
+      // The pairing line should extend from the launch point to the *missile's current position*, 
+      // not all the way to the target, creating a clean "tether" effect.
+      const visualProgress = Math.pow(progress, 0.8);
+      const currentMissileX = interceptor.launchPos.x + (smoothX - interceptor.launchPos.x) * visualProgress;
+      const currentMissileY = interceptor.launchPos.y + (smoothY - interceptor.launchPos.y) * visualProgress;
+
+      lineRef.current.setAttribute('x2', currentMissileX.toString());
+      lineRef.current.setAttribute('y2', currentMissileY.toString());
     });
   }, [track.x, track.y, track.spd, track.hdg, lastSweepTime, interceptor.engagementTime, isHooked]);
 
   return (
-    <line 
-      ref={lineRef}
-      x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
-      stroke={color} strokeWidth={0.2 / cameraZoom} strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
-      style={{ display: 'none' }}
-    />
-  );
+            <line
+              ref={lineRef}
+              x1={interceptor.launchPos.x} y1={interceptor.launchPos.y}
+              stroke={color} strokeWidth={0.08 / cameraZoom} strokeDasharray={`${0.4 / cameraZoom} ${0.6 / cameraZoom}`} opacity="0.6"
+              style={{ display: 'none' }}
+            />  );
 });
 
 const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom }: { trackId: string, isHooked: boolean, cameraZoom: number }) => {
@@ -315,42 +319,43 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom }: { trackId: st
   else if (track.type === 'HOSTILE') color = '#FF0000'; // Pure Red
   else if (track.type === 'SUSPECT') color = '#FF8800'; // Orange
 
-  // Logarithmic velocity vector
-  const vectorLength = 2.0 * Math.log10(track.spd / 10 + 1); 
-  const rad = track.hdg * (Math.PI / 180);
-
+    // Speed Leader (Velocity Vector)
+    // 10-second predictor line, capped at 4 NM visually to prevent hypersonic TBMs from dominating the screen.
+    const vectorLength = Math.min(4.0, (track.spd / 3600) * 10);
+    const rad = track.hdg * (Math.PI / 180);
   return (
-    <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
-      {/* Pairing Lines (Shooter to Target) */}
-      {track.interceptors && track.interceptors.map((interceptor) => (
-        <InterpolatedPairingLine 
-          key={`line-${interceptor.id}`}
-          interceptor={interceptor} track={track} lastSweepTime={lastSweepTime} 
-          color={color} cameraZoom={cameraZoom} isHooked={isHooked}
-        />
-      ))}
-
-      {/* Missile Vectors & TTI */}
-      {track.interceptors && track.interceptors.map((interceptor) => {
-        const age = currentSimTime - interceptor.engagementTime;
-        const showTti = isHooked || age < 1500;
-        return (
-          <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color={color} cameraZoom={cameraZoom} showTti={showTti} />
-        );
-      })}
-
-      {/* Track History Breadcrumbs (Optimized as single Polyline) */}
-      {track.history.length > 1 && (
-        <polyline 
-          points={track.history.map(pos => `${pos.x},${pos.y}`).join(' ')} 
-          fill="none" 
-          stroke={color} 
-          strokeWidth={0.2 / cameraZoom} 
-          opacity="0.4"
-          strokeDasharray={`${0.4 / cameraZoom} ${0.4 / cameraZoom}`}
-        />
-      )}
-      
+        <g className={track.coasting ? 'opacity-50' : 'opacity-100'}>
+          {/* Pairing Lines (Shooter to Target) */}
+          {track.interceptors && track.interceptors.map((interceptor) => (
+            <InterpolatedPairingLine
+              key={`line-${interceptor.id}`}
+              interceptor={interceptor} track={track} lastSweepTime={lastSweepTime}
+              color="#00E5FF" cameraZoom={cameraZoom} isHooked={isHooked}
+            />
+          ))}
+    
+          {/* Missile Vectors & TTI */}
+          {track.interceptors && track.interceptors.map((interceptor) => {
+            const age = currentSimTime - interceptor.engagementTime;
+            const showTti = isHooked || age < 1500;
+            return (
+              <MissileVector key={`missile-${interceptor.id}`} interceptor={interceptor} track={track} color="#00E5FF" cameraZoom={cameraZoom} showTti={showTti} />
+            );
+          })}
+            {/* Track History Breadcrumbs (Discrete radar return dots / DR Trailer) */}
+            {track.history.length > 0 && (
+              <g>
+                {track.history.map((pos, index) => (
+                  <circle
+                    key={`hist-${index}`}
+                    cx={pos.x} cy={pos.y}
+                    r={0.1 / cameraZoom}
+                    fill={color}
+                    opacity={0.45 * Math.pow(1 - index / track.history.length, 1.2)}
+                  />
+                ))}
+              </g>
+            )}      
       <InterpolatedTrackGroup 
         track={track} 
         lastSweepTime={lastSweepTime}
@@ -359,27 +364,30 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom }: { trackId: st
         <circle cx="0" cy="0" r={3 / cameraZoom} fill="transparent" />
 
         {isHooked && (
-          <rect x={-1.2 / cameraZoom} y={-1.2 / cameraZoom} width={2.4 / cameraZoom} height={2.4 / cameraZoom} fill="none" stroke="#00FFFF" strokeWidth={0.15 / cameraZoom} opacity="0.8" />
+          <rect x={-0.9 / cameraZoom} y={-0.9 / cameraZoom} width={1.8 / cameraZoom} height={1.8 / cameraZoom} fill="none" stroke="#00FFFF" strokeWidth={0.1 / cameraZoom} opacity="0.6" />
         )}
         
-        <line 
-          x1="0" y1="0" 
-          x2={Math.sin(rad) * vectorLength} 
-          y2={-Math.cos(rad) * vectorLength} 
-          stroke={color} strokeWidth={0.15 / cameraZoom} opacity="0.8"
+        <line
+          x1={Math.sin(rad) * (0.8 / cameraZoom)} y1={-Math.cos(rad) * (0.8 / cameraZoom)}
+          x2={Math.sin(rad) * (vectorLength + (0.8 / cameraZoom))}
+          y2={-Math.cos(rad) * (vectorLength + (0.8 / cameraZoom))}
+          stroke={color} strokeWidth={0.1 / cameraZoom} opacity="0.4"
           strokeDasharray={track.coasting ? `${0.5 / cameraZoom} ${0.5 / cameraZoom}` : "none"}
         />
-
         {/* NTDS Air Shapes from lookup (Removed expensive CSS drop-shadow) */}
-        <g transform={`scale(${0.08 / cameraZoom}) translate(-12, -12)`} stroke={color} strokeWidth="3" fill="none" strokeDasharray={track.coasting ? "4 4" : "none"}>
+        <g transform={`scale(${0.06 / cameraZoom}) translate(-12, -12)`} stroke={color} strokeWidth="3" fill="none" strokeDasharray={track.coasting ? "4 4" : "none"}>
           <path d={NTDS_SHAPES[track.type] || NTDS_SHAPES.UNKNOWN} />
+          {/* MIL-STD-2525 Missile Modifier (Inner Chevron) */}
+          {(track.category === 'TBM' || track.category === 'CM' || track.category === 'ROCKET') && (
+            <path d="M 6 15 L 12 7 L 18 15 L 12 12 Z" fill="none" strokeWidth="2" />
+          )}
         </g>
 
         {/* On-Glass Data Block with Leader Line */}
         {isHooked && (
           <g>
             {/* Leader Line */}
-            <line x1={1.0 / cameraZoom} y1={1.0 / cameraZoom} x2={1.8 / cameraZoom} y2={1.8 / cameraZoom} stroke={color} strokeWidth={0.1 / cameraZoom} opacity="0.8" />
+            <line x1={0.8 / cameraZoom} y1={0.8 / cameraZoom} x2={1.8 / cameraZoom} y2={1.8 / cameraZoom} stroke={color} strokeWidth={0.05 / cameraZoom} opacity="0.5" />
             <g transform={`translate(${2.2 / cameraZoom}, ${2.2 / cameraZoom})`}>
               <text x="0" y="0" fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" fontWeight="bold" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.threatName || track.id}</text>
               <text x="0" y={1.0 / cameraZoom} fill={color} fontSize={0.7 / cameraZoom} fontFamily="monospace" style={{ textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>{track.alt >= 18000 ? `FL${Math.round(track.alt/100)}` : `${Math.round(track.alt)} FT`} / {Math.round(track.spd).toString().padStart(3, '0')}</text>
@@ -992,17 +1000,16 @@ const FighterWaypoints = React.memo(({ cameraZoom, setDraggingWaypointId }: { ca
     <>
       {fighterTracks.map(t => (
         <g key={`wp-${t.id}`}>
-          {t.targetWaypoint && (
-            <line 
-              x1={t.x} y1={t.y} 
-              x2={t.targetWaypoint.x} y2={t.targetWaypoint.y} 
-              stroke={t.isRTB ? "#FFCC00" : "#00E5FF"} 
-              strokeWidth={0.2 / cameraZoom} 
-              strokeDasharray={`${1 / cameraZoom} ${1 / cameraZoom}`} 
-              opacity="0.5" 
-            />
-          )}
-
+                    {t.targetWaypoint && (
+                      <line
+                        x1={t.x} y1={t.y}
+                        x2={t.targetWaypoint.x} y2={t.targetWaypoint.y}
+                        stroke={t.isRTB ? "#FFCC00" : "#00E5FF"}
+                        strokeWidth={0.08 / cameraZoom}
+                        strokeDasharray={`${0.4 / cameraZoom} ${0.6 / cameraZoom}`}
+                        opacity="0.3"
+                      />
+                    )}
           {t.patrolWaypoint && !t.isRTB && (
             <g>
               <circle 
@@ -1113,17 +1120,16 @@ const GhostVectorLine = React.memo(({ vectoringTrackId, cameraZoom }: { vectorin
 
   return (
     <g>
-      <line 
-        ref={lineRef}
-        x1={track.x} y1={track.y} 
-        x2={initX} y2={initY} 
-        stroke="#00E5FF" 
-        strokeWidth={0.2 / cameraZoom} 
-        strokeDasharray={`${0.5 / cameraZoom} ${0.5 / cameraZoom}`} 
-        className="animate-pulse"
-        style={{ display: isHidden ? 'none' : '' }}
-      />
-      {/* Static Crosshair - No Ping to avoid "errant ghosting" */}
+            <line
+              ref={lineRef}
+              x1={track.x} y1={track.y}
+              x2={initX} y2={initY}
+              stroke="#00E5FF"
+              strokeWidth={0.08 / cameraZoom}
+              strokeDasharray={`${0.4 / cameraZoom} ${0.6 / cameraZoom}`}
+              className="animate-pulse"
+              style={{ display: isHidden ? 'none' : '' }}
+            />      {/* Static Crosshair - No Ping to avoid "errant ghosting" */}
       <g ref={crosshairGroupRef} transform={`translate(${initX}, ${initY})`} style={{ display: isHidden ? 'none' : '' }}>
         <line x1={-0.8 / cameraZoom} y1={0} x2={0.8 / cameraZoom} y2={0} stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} />
         <line x1={0} y1={-0.8 / cameraZoom} x2={0} y2={0.8 / cameraZoom} stroke="#00E5FF" strokeWidth={0.1 / cameraZoom} />
@@ -1431,31 +1437,32 @@ export default function App() {
             // Dynamic Profiles for Non-Fighter Tracks
             const distToBattery = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y, track.alt, 0);
             
-            if (track.id === 'FLT-EK404') {
-              if (simTimeRef.current >= 25) {
-                // Hijack Profile: Turn towards Dubai, aggressive descent, then land at DXB Airport
-                const targetX = 60; // DXB Airport X
-                const targetY = 46; // DXB Airport Y
+            if (track.id === 'FLT-EK404' || (track.category === 'FW' && track.targetWaypoint && !track.isFighter)) {
+              if (track.id !== 'FLT-EK404' || simTimeRef.current >= 25) {
+                // Landing Profile (Hijack or Normal)
+                const targetX = track.targetWaypoint ? track.targetWaypoint.x : 60; // DXB Airport X
+                const targetY = track.targetWaypoint ? track.targetWaypoint.y : 46; // DXB Airport Y
                 const dx = targetX - track.x;
                 const dy = targetY - track.y;
                 const distToTarget = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distToTarget > 2) {
-                  // Steer towards target (aggressive right turn at 4 deg/sec for hijacked airliner)
+                  // Steer towards target (standard turn at 4 deg/sec)
                   let desiredHdg = Math.atan2(dx, -dy) * (180 / Math.PI);
                   if (desiredHdg < 0) desiredHdg += 360;
                   let hdgDiff = desiredHdg - newHdg;
                   if (hdgDiff > 180) hdgDiff -= 360;
                   if (hdgDiff < -180) hdgDiff += 360;
-                  // Force a right turn if the diff is around 180
-                  if (Math.abs(hdgDiff) > 170 && hdgDiff < 0) hdgDiff = -hdgDiff;
+                  
+                  // Force a right turn if the diff is around 180 for hijacked airliner
+                  if (track.id === 'FLT-EK404' && Math.abs(hdgDiff) > 170 && hdgDiff < 0) hdgDiff = -hdgDiff;
                   
                   newHdg = (newHdg + Math.max(-4 * actualElapsedSecs, Math.min(4 * actualElapsedSecs, hdgDiff)) + 360) % 360;
 
                   // Descend to approach altitude (approx 10,000 ft/min dive = ~166 ft/sec)
                   if (newAlt > 5000) newAlt = Math.max(5000, newAlt - 166 * actualElapsedSecs); 
-                  // Accelerate
-                  if (newSpd < 650) newSpd += 10 * actualElapsedSecs; 
+                  // Accelerate (only for hijacked FLT-EK404)
+                  if (track.id === 'FLT-EK404' && newSpd < 650) newSpd += 10 * actualElapsedSecs; 
                 } else if (distToTarget > 0.5) {
                   // Final approach
                   newAlt = Math.max(1000, newAlt - 500 * actualElapsedSecs);
