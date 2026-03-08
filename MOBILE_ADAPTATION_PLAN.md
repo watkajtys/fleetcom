@@ -15,7 +15,7 @@ Transitioning a dense, desktop-first tactical interface to mobile requires stric
 ## 2. Layout Architecture Refactor
 
 ### A. Viewport & Orientation
-*   **Landscape Optimization:** The game is best played in landscape. We will implement CSS to prompt the user to rotate their device if they are in portrait mode.
+*   **Omni-Directional Playability:** The game must be fully playable in both Portrait and Landscape orientations. We will not force the user to rotate their device. The UI must dynamically stack or collapse to accommodate narrow vertical screens just as well as wide horizontal ones.
 *   **Fullscreen & Safe Areas:** Implement `viewport-fit=cover` and handle `env(safe-area-inset-*)` to ensure UI elements aren't hidden under camera notches or rounded corners.
 
 ### B. HUD / Top Status Bar
@@ -27,9 +27,13 @@ Draggable windows are an anti-pattern on mobile.
 *   **Track Summary & Logs (Left Window):** Convert this into a **Slide-out Side Drawer**. A small persistent button on the left edge will open it, sliding over the map.
 *   **Tactical Tote (Right Window):** Convert this into a **Bottom Sheet**. When a track is "hooked", this sheet slides up from the bottom, presenting the track data. It can be swiped down to dismiss (which also unhooks the track).
 
-### D. Action Bar (Soft Keys)
-*   **Horizontal Scrolling:** Make the bottom action bar horizontally scrollable (with the scrollbar hidden) to accommodate smaller screens without shrinking buttons to unclickable sizes.
-*   **Grouped Actions:** Combine the three Engagement buttons (PAC-3, THAAD, TAMIR) into a single primary "ENGAGE" button that opens a secondary radial menu or sub-bar.
+### D. Action Bar (Soft Keys) & Contextual Commands
+*   **Fundamental Reinvestigation:** The current static row of soft keys (1-7) takes up too much vertical space and feels cluttered on narrow portrait screens. We need a modern mobile C2 approach.
+*   **Dynamic Action Contexts:** The action bar should fundamentally change depending on the state of the game:
+    *   *Default State:* High-level toggles (WCS, Doctrine, Filters).
+    *   *Hostile Hooked:* Weapon assignments (THAAD, PAC-3, TAMIR).
+    *   *Fighter Hooked:* Vectoring commands, RTB, Intercept assignments.
+*   **The "Action FAB" (Floating Action Button):** Consider replacing the bottom bar entirely with a contextual FAB in the bottom right (thumb zone) that expands into a radial or vertical speed-dial menu based on what is currently selected on the map.
 
 ---
 
@@ -45,8 +49,12 @@ Draggable windows are an anti-pattern on mobile.
     *   *Desktop:* `Shift + Drag`
     *   *Mobile Solution:* Add a "Multi-Select" toggle switch to the UI. When active, dragging on the map creates the selection box instead of panning the camera. Alternatively, implement a "Long-Press" (500ms delay) to anchor the box, followed by a drag.
 
-### C. Vectoring (Fighter Control)
-*   Currently, clicking "Vector" makes the next click set a waypoint. On mobile, we need a clear visual state (e.g., screen border pulses blue) indicating the map is in "Waypoint Mode". Tapping sets the waypoint and immediately exits the mode.
+### C. Vectoring (Fighter Control) - Comprehensive Mobile Review
+*   Currently, clicking "Vector" makes the next click set a waypoint. On mobile, this two-step "ghost state" is highly error-prone because users accidentally drag the map when trying to place the waypoint.
+*   **New Vectoring Paradigm:** 
+    *   Instead of tapping the map to place a waypoint, provide an explicit "Move Here" button that appears wherever the user long-presses.
+    *   *Or:* Allow users to literally drag the fighter symbol itself to draw a new path, locking map panning while a fighter is being dragged.
+    *   We need a clear screen-wide visual state (e.g., an animated border or a dark vignette) indicating the UI is waiting for a coordinate input, so the user knows map dragging is temporarily disabled.
 
 ---
 
@@ -55,7 +63,7 @@ Draggable windows are an anti-pattern on mobile.
 **Phase 1: Viewport & CSS Foundations**
 1. Update `index.html` meta tags for standalone/fullscreen mobile behavior.
 2. Add safe-area padding to headers and footers.
-3. Add a "Please Rotate Device" overlay for portrait orientation.
+3. Ensure UI stacks correctly in vertical (Portrait) orientations.
 
 **Phase 2: Touch Gestures & Map Control**
 1. Refactor `App.tsx` pointer event handlers (`onPointerDown`, `onPointerMove`, `onPointerUp`) to track active pointers in a Map or Array.
@@ -67,7 +75,7 @@ Draggable windows are an anti-pattern on mobile.
 2. Create a `BottomSheet` component for the Hooked Track Tote.
 3. Update Tailwind classes to hide `DraggableWindow` on screens `< 1024px`, and show the mobile alternatives.
 
-**Phase 4: Action Bar & Contextual Polish**
-1. Refactor the footer to be conditionally rendered based on `hookedTrackIds.length`.
-2. Ensure minimum button sizes are 48x48 pixels.
+**Phase 4: Action Bar Re-architecture & Vectoring**
+1. Design and implement the new Contextual Action Bar or FAB system.
+2. Completely overhaul the Fighter Vectoring UX for touch, implementing explicit visual states and drag-to-path mechanics to prevent panning collisions.
 3. Refactor `BriefingModal` and `AfterActionReport` to use single-column layouts via Tailwind (`flex-col` on mobile, `md:grid-cols-2` on desktop).

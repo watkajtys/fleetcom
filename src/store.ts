@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Track, TrackType, DefendedAsset } from './types';
+import { Track, TrackType, DefendedAsset, EngagementDoctrine } from './types';
 import { INITIAL_TRACKS, DEFENDED_ASSETS } from './constants';
 
 interface TrackStore {
@@ -30,8 +30,8 @@ interface TrackStore {
   // ROE State
   wcs: 'TIGHT' | 'FREE';
   setWcs: (wcs: 'TIGHT' | 'FREE') => void;
-  doctrine: { autoEngageTBM: boolean; autoEngageCM: boolean; autoEngageUAS: boolean; autoEngageRocket: boolean };
-  setDoctrine: (doctrine: { autoEngageTBM: boolean; autoEngageCM: boolean; autoEngageUAS: boolean; autoEngageRocket: boolean }) => void;
+  doctrine: EngagementDoctrine;
+  setDoctrine: (doctrineOrUpdater: EngagementDoctrine | ((prev: EngagementDoctrine) => EngagementDoctrine)) => void;
 }
 
 export const useTrackStore = create<TrackStore>((set, get) => {
@@ -60,7 +60,9 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     wcs: 'TIGHT',
     setWcs: (wcs) => set({ wcs }),
     doctrine: { autoEngageTBM: 0, autoEngageCM: 0, autoEngageUAS: 0, autoEngageRocket: 0 },
-    setDoctrine: (doctrine) => set({ doctrine }),
+    setDoctrine: (doctrineOrUpdater) => set(state => ({
+      doctrine: typeof doctrineOrUpdater === 'function' ? doctrineOrUpdater(state.doctrine) : doctrineOrUpdater
+    })),
 
     setTracks: (updater, currentSimTime) => {
       set((state) => {

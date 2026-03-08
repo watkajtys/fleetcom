@@ -924,10 +924,10 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
                     setWcs(nextWcs);
                     if (nextWcs === 'FREE') {
                       setDoctrine({
-                        autoEngageTBM: true,
-                        autoEngageCM: true,
-                        autoEngageUAS: true,
-                        autoEngageRocket: true
+                        autoEngageTBM: 1,
+                        autoEngageCM: 1,
+                        autoEngageUAS: 1,
+                        autoEngageRocket: 1
                       });
                     }
                   }}

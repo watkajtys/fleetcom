@@ -136,10 +136,10 @@ export const MISSION_STEPS: MissionEvent[] = [
     action: () => {
       useTrackStore.getState().setWcs('FREE');
       useTrackStore.getState().setDoctrine({
-        autoEngageTBM: true,
-        autoEngageCM: true,
-        autoEngageUAS: true,
-        autoEngageRocket: true
+        autoEngageTBM: 1,
+        autoEngageCM: 1,
+        autoEngageUAS: 1,
+        autoEngageRocket: 1
       });
     }
   },
