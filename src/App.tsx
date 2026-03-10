@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Track, TrackType, SystemLog, EngagementDoctrine } from './types';
 import { BATTERY_POS, BULLSEYE_POS, WEAPON_STATS, INITIAL_TRACKS, DEFENDED_ASSETS } from './constants';
-import { getThreatName, calculateRange, calculateBearing, calculateKinematics, calculateClosureRate, MACH_TO_NM_SEC } from './utils';
+import { getThreatName, calculateRange, calculateRangeSq, calculateBearing, calculateKinematics, calculateClosureRate, calculateTrueTimeOfFlight, MACH_TO_NM_SEC } from './utils';
 import { MISSION_STEPS } from './mission';
 import { processFighters } from './ai';
 import { useSyncExternalStore } from 'react';
@@ -134,13 +134,17 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
       const currentTargetX = track.x + sinH * (spdNmSec * elapsedSinceLastSweep);
       const currentTargetY = track.y - cosH * (spdNmSec * elapsedSinceLastSweep);
 
-      // Use a pure pursuit curve to prevent snapback/teleporting caused by extrapolating jittery headings over long remaining times.
-      const visualProgress = Math.pow(progress, 0.8);
-      let missileX = startX + (currentTargetX - startX) * visualProgress;
-      let missileY = startY + (currentTargetY - startY) * visualProgress;
+      const remainingTimeSecs = Math.max(0, (interceptor.interceptDuration - elapsedSinceLaunch) / 1000);
+      const totalTimeFromLastSweep = elapsedSinceLastSweep + remainingTimeSecs;
+      const expectedInterceptX = track.x + sinH * (spdNmSec * totalTimeFromLastSweep);
+      const expectedInterceptY = track.y - cosH * (spdNmSec * totalTimeFromLastSweep);
 
-      const targetLeadX = currentTargetX; // for distance calculations
-      const targetLeadY = currentTargetY;
+      const visualProgress = Math.pow(progress, 0.8);
+      let missileX = startX + (expectedInterceptX - startX) * visualProgress;
+      let missileY = startY + (expectedInterceptY - startY) * visualProgress;
+
+      const targetLeadX = expectedInterceptX;
+      const targetLeadY = expectedInterceptY;
 
       if (interceptor.isPkHit === false && progress > 0.85) {
         const missProgress = (progress - 0.85) / 0.15;
@@ -211,8 +215,8 @@ const MissileVector = React.memo(({ interceptor, track, color, cameraZoom, showT
 import { useTrackStore } from './store';
 
 const trackSymbolAreEqual = (
-  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number },
-  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number }
+  prevProps: { trackId: string, isHooked: boolean, cameraZoom: number, onStartVectorDrag?: (id: string) => void },
+  nextProps: { trackId: string, isHooked: boolean, cameraZoom: number, onStartVectorDrag?: (id: string) => void }
 ) => {
   if (prevProps.trackId !== nextProps.trackId) return false;
   if (prevProps.isHooked !== nextProps.isHooked) return false;
@@ -274,27 +278,42 @@ const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime,
       if (!lineRef.current) return;
       const age = nowStore.now - interceptor.engagementTime;
       const progress = Math.min(1, Math.max(0, age / interceptor.interceptDuration));
-      
+
       if (progress >= 1 || (age > 1500 && !isHooked)) {
          lineRef.current.style.display = 'none';
          return;
       }
       lineRef.current.style.display = '';
-      
-      const elapsed = (nowStore.now - lastSweepTime) / 1000;
+
+      const elapsedSinceLastSweep = (nowStore.now - lastSweepTime) / 1000;
       const rad = track.hdg * (Math.PI / 180);
-      const smoothX = track.x + Math.sin(rad) * ((track.spd / 3600) * elapsed);
-      const smoothY = track.y - Math.cos(rad) * ((track.spd / 3600) * elapsed);
-      
+      const spdNmSec = track.spd / 3600;
+      const sinH = Math.sin(rad);
+      const cosH = Math.cos(rad);
+
+      const remainingTimeSecs = Math.max(0, (interceptor.interceptDuration - age) / 1000);
+
+      // Calculate intercept from base track position to prevent double-extrapolation tick
+      const totalTimeFromLastSweep = elapsedSinceLastSweep + remainingTimeSecs;
+      const expectedInterceptX = track.x + sinH * (spdNmSec * totalTimeFromLastSweep);
+      const expectedInterceptY = track.y - cosH * (spdNmSec * totalTimeFromLastSweep);
+
       // The pairing line should extend from the launch point to the *missile's current position*, 
       // not all the way to the target, creating a clean "tether" effect.
       const visualProgress = Math.pow(progress, 0.8);
-      const currentMissileX = interceptor.launchPos.x + (smoothX - interceptor.launchPos.x) * visualProgress;
-      const currentMissileY = interceptor.launchPos.y + (smoothY - interceptor.launchPos.y) * visualProgress;
+      let currentMissileX = interceptor.launchPos.x + (expectedInterceptX - interceptor.launchPos.x) * visualProgress;
+      let currentMissileY = interceptor.launchPos.y + (expectedInterceptY - interceptor.launchPos.y) * visualProgress;
+
+      if (interceptor.isPkHit === false && progress > 0.85) {
+        const missProgress = (progress - 0.85) / 0.15;
+        const driftX = Math.sin(interceptor.engagementTime) * 2.5 * missProgress;
+        const driftY = Math.cos(interceptor.engagementTime) * 2.5 * missProgress;
+        currentMissileX += driftX;
+        currentMissileY += driftY;
+      }
 
       lineRef.current.setAttribute('x2', currentMissileX.toString());
-      lineRef.current.setAttribute('y2', currentMissileY.toString());
-    });
+      lineRef.current.setAttribute('y2', currentMissileY.toString());    });
   }, [track.x, track.y, track.spd, track.hdg, lastSweepTime, interceptor.engagementTime, isHooked]);
 
   return (
@@ -306,7 +325,7 @@ const InterpolatedPairingLine = React.memo(({ interceptor, track, lastSweepTime,
             />  );
 });
 
-const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom }: { trackId: string, isHooked: boolean, cameraZoom: number }) => {
+const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom, onStartVectorDrag }: { trackId: string, isHooked: boolean, cameraZoom: number, onStartVectorDrag?: (id: string) => void }) => {
   const track = useTrackStore(state => state.tracks[trackId]);
   const lastSweepTime = useTrackStore(state => state.lastSweepTime);
   const currentSimTime = nowStore.now;
@@ -359,9 +378,17 @@ const TrackSymbol = React.memo(({ trackId, isHooked, cameraZoom }: { trackId: st
       <InterpolatedTrackGroup 
         track={track} 
         lastSweepTime={lastSweepTime}
-        className="cursor-pointer"
+        className="cursor-pointer pointer-events-auto"
+        onPointerDown={(e: React.PointerEvent) => {
+          if (track.isFighter && isHooked && onStartVectorDrag) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            e.stopPropagation();
+            onStartVectorDrag(track.id);
+          }
+        }}
       >
-        <circle cx="0" cy="0" r={3 / cameraZoom} fill="transparent" />
+        {/* Invisible hit target for easier tapping */}
+        <circle cx="0" cy="0" r={(isHooked && track.isFighter) ? 12 / cameraZoom : 4 / cameraZoom} fill="transparent" />
 
         {isHooked && (
           <rect x={-0.9 / cameraZoom} y={-0.9 / cameraZoom} width={1.8 / cameraZoom} height={1.8 / cameraZoom} fill="none" stroke="#00FFFF" strokeWidth={0.1 / cameraZoom} opacity="0.6" />
@@ -589,7 +616,7 @@ const TrackSummaryTable = React.memo(({ hookedTrackIds, setHookedTrackIds, filte
           </thead>
           <tbody className="divide-y divide-[#001A26]">
             {tracks.map(t => {
-              const range = calculateRange(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0).toFixed(1);
+              const range = calculateRangeSq(t.x, t.y, BATTERY_POS.x, BATTERY_POS.y, t.alt, 0).toFixed(1);
               const isHooked = hookedTrackIds.includes(t.id);
               let typeColor = 'text-[#FFFF00]';
               if (t.type === 'FRIEND') typeColor = 'text-[#00FF33]';
@@ -774,9 +801,9 @@ const Tote = React.memo(({ hookedTrackIds, masterWarning, vectoringTrackId, setV
 
   const kinematics = hookedTrack ? calculateKinematics(hookedTrack) : null;
   const brg = hookedTrack ? calculateBearing(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y).toString().padStart(3, '0') : '';
-  const rng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y, hookedTrack.alt, 0).toFixed(1).padStart(4, '0') : '';
+  const rng = hookedTrack ? calculateRangeSq(hookedTrack.x, hookedTrack.y, BATTERY_POS.x, BATTERY_POS.y, hookedTrack.alt, 0).toFixed(1).padStart(4, '0') : '';
   const bullBrg = hookedTrack ? calculateBearing(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y).toString().padStart(3, '0') : '';
-  const bullRng = hookedTrack ? calculateRange(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y, hookedTrack.alt, 0).toFixed(0).padStart(3, '0') : '';
+  const bullRng = hookedTrack ? calculateRangeSq(hookedTrack.x, hookedTrack.y, BULLSEYE_POS.x, BULLSEYE_POS.y, hookedTrack.alt, 0).toFixed(0).padStart(3, '0') : '';
 
   return (
     <aside className={`w-full bg-[#001A26]/80 lg:bg-[#001A26]/40 lg:backdrop-blur-xl border ${masterWarning ? 'border-[#FF0033]' : 'border-[#002B40]'} flex flex-col pointer-events-auto transition-all duration-300 h-fit`}>
@@ -1254,6 +1281,10 @@ export default function App() {
         let anyDestroyed = false;
         let anyInterceptorsRemoved = false;
         const destroyedIds = new Set<string>();
+
+        // Pre-filter to only tracks that actually have interceptors attached
+        const tracksWithInterceptors = current.filter(t => t.interceptors && t.interceptors.length > 0);
+        if (tracksWithInterceptors.length === 0) return current; // Fast exit
         
         const next = current.map(t => {
           if (!t.interceptors || t.interceptors.length === 0) return t;
@@ -1437,7 +1468,7 @@ export default function App() {
             }
           } else {
             // Dynamic Profiles for Non-Fighter Tracks
-            const distToBattery = calculateRange(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y, track.alt, 0);
+            const distToBattery = calculateRangeSq(track.x, track.y, BATTERY_POS.x, BATTERY_POS.y, track.alt, 0);
             
             if (track.id === 'FLT-EK404' || (track.category === 'FW' && track.targetWaypoint && !track.isFighter)) {
               if (track.id !== 'FLT-EK404' || simTimeRef.current >= 25) {
@@ -1483,7 +1514,7 @@ export default function App() {
               // Ballistic Profile: Exospheric cruise, then terminal hypersonic dive
               const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
               const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
-              const distToTarget2D = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0);
+              const distToTarget2D = calculateRangeSq(track.x, track.y, tgtX, tgtY, 0, 0);
               
               if (distToTarget2D < 45) {
                 // Terminal phase: Altitude is locked to remaining distance to mathematically guarantee impact
@@ -1500,7 +1531,7 @@ export default function App() {
               // Rocket Salvo: Ballistic arc scaling with distance
               const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
               const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
-              const distToTarget2D = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0);
+              const distToTarget2D = calculateRangeSq(track.x, track.y, tgtX, tgtY, 0, 0);
               
               // Simple robust altitude profile: Apex early, then long descent.
               // Start descending when 45 NM away.
@@ -1559,7 +1590,7 @@ export default function App() {
                     if (track.category === 'TBM' || track.category === 'ROCKET' || track.category === 'CM' || track.category === 'UAS') {
                       const tgtX = track.targetWaypoint ? track.targetWaypoint.x : BATTERY_POS.x;
                       const tgtY = track.targetWaypoint ? track.targetWaypoint.y : BATTERY_POS.y;
-                      const distToWaypoint = calculateRange(track.x, track.y, tgtX, tgtY, 0, 0); // 2D distance
+                      const distToWaypoint = calculateRangeSq(track.x, track.y, tgtX, tgtY, 0, 0); // 2D distance
                       if (distToWaypoint <= moveFactor) {
                         resX = tgtX;
                         resY = tgtY;
@@ -1569,7 +1600,7 @@ export default function App() {
                     }
           
                     const isStealthy = track.category === 'UAS' || track.alt < 500;
-                    const rangeToBattery = calculateRange(resX, resY, BATTERY_POS.x, BATTERY_POS.y, newAlt, 0);
+                    const rangeToBattery = calculateRangeSq(resX, resY, BATTERY_POS.x, BATTERY_POS.y, newAlt, 0);
                     
                     // Radar Horizon calculation (Standard NM formula)
                     const radarHorizonNm = 1.23 * (Math.sqrt(100) + Math.sqrt(newAlt));
@@ -1581,21 +1612,25 @@ export default function App() {
                       detectionRange *= 0.45; // 55% reduction in detection range for stealth/low-alt
                     }
 
-                    // Check if any active friendly fighter can see it (simulating datalink from fighter radar)
+                    const isDetectedByBattery = rangeToBattery <= detectionRange;
                     let spottedByFighter = false;
-                    for (const f of currentTracks) {
-                      if (f.isFighter && !f.isRTB) {
-                        const distToFighter = calculateRange(resX, resY, f.x, f.y, newAlt, f.alt);
-                        // Fighter radar has ~40 NM range against typical targets, half that for stealth
-                        const fighterDetectRange = isStealthy ? 20 : 40;
-                        if (distToFighter <= fighterDetectRange) {
-                          spottedByFighter = true;
-                          break;
+                    
+                    if (!isDetectedByBattery && track.sensor !== 'L16') {
+                      for (const f of currentTracks) {
+                        if (f.isFighter && !f.isRTB) {
+                          const distToFighter = calculateRangeSq(resX, resY, f.x, f.y, newAlt, f.alt);
+                          // Fighter radar has ~40 NM range against typical targets, half that for stealth
+                          // Using squared values: 40^2 = 1600, 20^2 = 400
+                          const fighterDetectRangeSq = isStealthy ? 400 : 1600;
+                          if (distToFighter <= fighterDetectRangeSq) {
+                            spottedByFighter = true;
+                            break;
+                          }
                         }
                       }
                     }
 
-                    const isDetected = track.sensor === 'L16' || rangeToBattery <= detectionRange || spottedByFighter;
+                    const isDetected = track.sensor === 'L16' || isDetectedByBattery || spottedByFighter;
 
           const newHistory = [{x: track.x, y: track.y}, ...track.history].slice(0, 15);
           
@@ -1619,7 +1654,7 @@ export default function App() {
           // Escalate SUSPECT UAS to HOSTILE if they are within 15NM of any asset
           if (updatedTrack.type === 'SUSPECT' && updatedTrack.category === 'UAS') {
              for (const asset of DEFENDED_ASSETS) {
-               if (calculateRange(updatedTrack.x, updatedTrack.y, asset.x, asset.y) < 15) {
+               if (calculateRangeSq(updatedTrack.x, updatedTrack.y, asset.x, asset.y) < 225) { // 15 squared = 225
                  updatedTrack.type = 'HOSTILE';
                  break;
                }
@@ -1667,41 +1702,46 @@ export default function App() {
             let maxSalvo = 1;
 
             if (updatedTrack.category === 'TBM') {
-              const rng = calculateRange(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
-              if (rng > 40 && rng <= 100 && inventoryRef.current.thaad > 0 && doc.thaad > 0) { weaponToUse = 'THAAD'; maxSalvo = doc.thaad; }
-              else if (rng <= 40 && inventoryRef.current.pac3 > 0 && doc.pac3 > 0) { weaponToUse = 'PAC-3'; maxSalvo = doc.pac3; }
+              const rngSq = calculateRangeSq(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+              // THAAD engages between 40NM and 100NM (1600 and 10000 squared)
+              if (rngSq > 1600 && rngSq <= 10000 && inventoryRef.current.thaad > 0 && doc.thaad > 0) { weaponToUse = 'THAAD'; maxSalvo = doc.thaad; }
+              // PAC-3 engages under 40NM (1600 squared)
+              else if (rngSq <= 1600 && inventoryRef.current.pac3 > 0 && doc.pac3 > 0) { weaponToUse = 'PAC-3'; maxSalvo = doc.pac3; }
             } else if (updatedTrack.category === 'CM') {
-              if (inventoryRef.current.pac3 > 0 && doc.pac3 > 0) { weaponToUse = 'PAC-3'; maxSalvo = doc.pac3; }
-              else if (inventoryRef.current.tamir > 0 && doc.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = doc.tamir; }
+              const rngSq = calculateRangeSq(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+              if (rngSq <= 1600 && inventoryRef.current.pac3 > 0 && doc.pac3 > 0) { weaponToUse = 'PAC-3'; maxSalvo = doc.pac3; }
+              else if (rngSq <= 1225 && inventoryRef.current.tamir > 0 && doc.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = doc.tamir; }
             } else if (updatedTrack.category === 'ROCKET') {
-              if (inventoryRef.current.tamir > 0 && doc.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = doc.tamir; }
+              const rngSq = calculateRangeSq(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+              if (rngSq <= 1225 && inventoryRef.current.tamir > 0 && doc.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = doc.tamir; }
             } else if (updatedTrack.category === 'UAS') {
-              if (inventoryRef.current.tamir > 0 && doc.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = doc.tamir; }
+              const rngSq = calculateRangeSq(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+              if (rngSq <= 1225 && inventoryRef.current.tamir > 0 && doc.tamir > 0) { weaponToUse = 'TAMIR'; maxSalvo = doc.tamir; }
             }
 
                         if (weaponToUse && existingInterceptors < maxSalvo) {
                           const stats = WEAPON_STATS[weaponToUse];
-                          const rng = calculateRange(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
-            
-                          if (rng <= stats.range) {
+                          const rngSq = calculateRangeSq(updatedTrack.x, updatedTrack.y, BATTERY_POS.x, BATTERY_POS.y, updatedTrack.alt, 0);
+
+                          if (rngSq <= stats.range * stats.range) {
                             const shotsToFire = maxSalvo - existingInterceptors;
-                            
+
                             for (let i = 0; i < shotsToFire; i++) {
                               const missileSpdNmSec = stats.speedMach * MACH_TO_NM_SEC;
-                              const closureRate = calculateClosureRate(BATTERY_POS, updatedTrack, missileSpdNmSec);
-                              
+                              const tof = calculateTrueTimeOfFlight(BATTERY_POS, updatedTrack, missileSpdNmSec);
+
                               // For a double-salvo at the same target, add an extra 2.5 seconds between the two missiles
                               // so they don't fly perfectly on top of each other.
-                              const targetSalvoStaggerMs = i * 2500; 
+                              const targetSalvoStaggerMs = i * 2500;
                               const shotDelayMs = (shotsFiredThisSweep * 1000) + targetSalvoStaggerMs;
-                              
+
                               shotsFiredThisSweep++;
-                              const interceptTimeSecs = (rng / Math.max(0.1, closureRate)) + (shotDelayMs / 1000);
-                              
+                              const interceptTimeSecs = tof + (shotDelayMs / 1000);
+
                               const maxFlightTime = stats.range / missileSpdNmSec;
-                              let interceptDurationSecs = rng / Math.max(0.1, closureRate);
+                              let interceptDurationSecs = tof;
                               let isPkHit = Math.random() <= stats.pk;
-                              
+
                               if (interceptDurationSecs > maxFlightTime) {
                                 interceptDurationSecs = maxFlightTime;
                                 isPkHit = false; // Out of fuel
@@ -1715,10 +1755,9 @@ export default function App() {
                                 engagementTime: sweepSimTime + shotDelayMs,
                                 interceptDuration: interceptDurationSecs * 1000,
                                 interceptTtl: Math.ceil(interceptDurationSecs),
-                                initialRange: rng,
+                                initialRange: Math.sqrt(rngSq),
                                 isPkHit
-                              };
-            
+                              };            
                               const invKey = weaponToUse.toLowerCase().replace('-3', '3') as keyof typeof inventory;
                               inventoryRef.current[invKey]--;
                               incrementInterceptorsFired(weaponToUse);
@@ -1737,8 +1776,10 @@ export default function App() {
                         if (doc.cram > 0 && updatedTrack.type === 'HOSTILE' && updatedTrack.category !== 'TBM' && (!updatedTrack.interceptors || !updatedTrack.interceptors.some(i => i.shooterId.startsWith('C-RAM')))) {
                           for (const asset of DEFENDED_ASSETS) {
                             if (!asset.hasCram) continue;
-                            const rngToAsset = calculateRange(updatedTrack.x, updatedTrack.y, asset.x, asset.y, updatedTrack.alt, 0);
-                            if (rngToAsset <= 2.5) {
+                            const rngToAssetSq = calculateRangeSq(updatedTrack.x, updatedTrack.y, asset.x, asset.y, updatedTrack.alt, 0);
+                            
+                            // C-RAM range is 2.5 NM. 2.5 squared is 6.25.
+                            if (rngToAssetSq <= 6.25) {
                               const shotDelayMs = (shotsFiredThisSweep * 250); // C-RAM fires fast
                               shotsFiredThisSweep++;
             
@@ -1746,10 +1787,11 @@ export default function App() {
                               events.push({ type: 'LOG', message: `C-RAM (${asset.id}) ENGAGING LEAKER TRK ${updatedTrack.id}`, logType: 'ACTION' });
                               events.push({ type: 'COST', amount: WEAPON_STATS['C-RAM'].cost });
             
-                              const closureRate = calculateClosureRate({x: asset.x, y: asset.y, alt: 0}, updatedTrack, WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC);
+                              const missileSpdNmSec = WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC;
+                              const tof = calculateTrueTimeOfFlight({x: asset.x, y: asset.y, alt: 0}, updatedTrack, missileSpdNmSec);
                               
-                              const maxFlightTime = WEAPON_STATS['C-RAM'].range / (WEAPON_STATS['C-RAM'].speedMach * MACH_TO_NM_SEC);
-                              let interceptDurationSecs = rngToAsset / Math.max(0.1, closureRate);
+                              const maxFlightTime = WEAPON_STATS['C-RAM'].range / missileSpdNmSec;
+                              let interceptDurationSecs = tof;
                               let isPkHit = Math.random() <= WEAPON_STATS['C-RAM'].pk;
                               
                               if (interceptDurationSecs > maxFlightTime) {
@@ -1760,7 +1802,7 @@ export default function App() {
                               const newInterceptor = {
                                 id: `CRAM-${sweepSimTime}-${Math.random()}`, weapon: 'C-RAM' as const, shooterId: `C-RAM (${asset.id})`,
                                 launchPos: { x: asset.x, y: asset.y }, engagementTime: sweepSimTime + shotDelayMs, interceptDuration: interceptDurationSecs * 1000,
-                                interceptTtl: Math.ceil(interceptDurationSecs), isPkHit
+                                interceptTtl: Math.ceil(interceptDurationSecs), initialRange: Math.sqrt(rngToAssetSq), isPkHit
                               };                  updatedTrack.interceptors = [...(updatedTrack.interceptors || []), newInterceptor];
                   changed = true;
                   break; // only one C-RAM engagement per sweep per track needed
@@ -1785,7 +1827,7 @@ export default function App() {
                                                   if (!isDestroyedThisSweep && (t.id === 'FLT-EK404' || t.id === 'UAE-992' || t.id === 'BAW-107') && t.alt <= 100) {
                                                     const targetX = t.targetWaypoint ? t.targetWaypoint.x : (t.id === 'FLT-EK404' ? 60 : BATTERY_POS.x);
                                                     const targetY = t.targetWaypoint ? t.targetWaypoint.y : (t.id === 'FLT-EK404' ? 46 : BATTERY_POS.y);
-                                                    const distToTarget = calculateRange(t.x, t.y, targetX, targetY);
+                                                    const distToTarget = calculateRangeSq(t.x, t.y, targetX, targetY);
                                                     
                                                     // Only counts as landed if it reached the airport
                                                     if (distToTarget < 2.0) {
@@ -1804,7 +1846,7 @@ export default function App() {
                                                     let hitAsset = false;
                                                     for (const assetId in assetsRef.current) {
                                                       const asset = assetsRef.current[assetId];
-                                                      const dist = calculateRange(t.x, t.y, asset.x, asset.y, t.alt, 0);
+                                                      const dist = calculateRangeSq(t.x, t.y, asset.x, asset.y, t.alt, 0);
                                                       
                                                       // 2.5 NM threshold because fast TBMs jump ~3.3NM per 3s sweep
                                                       // Altitude must also be near ground level to count as an impact
@@ -1826,8 +1868,8 @@ export default function App() {
                                                       const tgtX = t.targetWaypoint ? t.targetWaypoint.x : BATTERY_POS.x;
                                                       const tgtY = t.targetWaypoint ? t.targetWaypoint.y : BATTERY_POS.y;
                                                       
-                                                      const isBallisticGroundHit = (t.category === 'TBM' || t.category === 'ROCKET') && t.alt <= 100 && calculateRange(t.x, t.y, tgtX, tgtY, 0, 0) < 2.0;
-                                                      const isSteeredGroundHit = (t.category === 'CM' || t.category === 'UAS') && calculateRange(t.x, t.y, tgtX, tgtY) < 1.0;
+                                                      const isBallisticGroundHit = (t.category === 'TBM' || t.category === 'ROCKET') && t.alt <= 100 && calculateRangeSq(t.x, t.y, tgtX, tgtY, 0, 0) < 2.0;
+                                                      const isSteeredGroundHit = (t.category === 'CM' || t.category === 'UAS') && calculateRangeSq(t.x, t.y, tgtX, tgtY) < 1.0;
                                                       
                                                       if (isBallisticGroundHit || isSteeredGroundHit) {
                                                         let damage = 10; // Default UAS
@@ -1839,7 +1881,7 @@ export default function App() {
                                                         
                                                         // Mathematically check if it fell within the green "Defended Metro Area" polygon
                                                         // The center of that polygon is roughly x: 51, y: 54. We'll use a 12 NM radius for the metro area.
-                                                        const distToMetroCenter = calculateRange(t.x, t.y, 51, 54);
+                                                        const distToMetroCenter = calculateRangeSq(t.x, t.y, 51, 54);
                                                         const isPopulated = distToMetroCenter <= 12;
 
                                                         events.push({ type: 'GROUND_IMPACT', trackId: t.id, damage, x: t.x, y: t.y, isPopulated } as any);
@@ -1850,7 +1892,7 @@ export default function App() {
                                         
                                                 const impactedTrackIds = new Set(impactedTracks.map(it => it.trackId));                
                                 return nextTracks.filter(t =>
-                                  !impactedTrackIds.has(t.id) &&                  !(t.isFighter && t.isRTB && calculateRange(t.x, t.y, 57.5, 62.5) < 2) &&
+                                  !impactedTrackIds.has(t.id) &&                  !(t.isFighter && t.isRTB && calculateRangeSq(t.x, t.y, 57.5, 62.5) < 2) &&
                   t.x >= -100 && t.x <= 200 && t.y >= -100 && t.y <= 200
                 );      }, sweepSimTime);
 
@@ -2066,6 +2108,26 @@ export default function App() {
       return;
     }
 
+    if (vectoringTrackId) {
+      const track = useTrackStore.getState().getTrack(vectoringTrackId);
+      const coords = getMapCoords(e, e.currentTarget);
+      
+      // If we dragged at all, or just clicked on the map, set the waypoint.
+      // We skip setting the waypoint ONLY if they clicked directly on the track (no drag) 
+      // so they can subsequently click the map.
+      if (track) {
+         const dist = Math.hypot(coords.x - track.x, coords.y - track.y);
+         if (dist > 2) {
+            setTracks(current => current.map(t => 
+              t.id === vectoringTrackId ? { ...t, targetWaypoint: { x: coords.x, y: coords.y }, patrolWaypoint: { x: coords.x, y: coords.y } } : t
+            ));
+            addLog(`VECTOR COMMAND ISSUED TO ${vectoringTrackId}`, 'ACTION');
+            setVectoringTrackId(null);
+            return;
+         }
+      }
+    }
+
     if (e.type === 'pointerup') {
       if (isSelecting && selectionPolygon.length > 0) {
         const lastSweepTime = useTrackStore.getState().lastSweepTime;
@@ -2129,7 +2191,7 @@ export default function App() {
             const smoothX = t.x + Math.sin(radOld) * ((t.spd / 3600) * elapsed);
             const smoothY = t.y - Math.cos(radOld) * ((t.spd / 3600) * elapsed);
             // Calculate 2D distance for click detection
-            const dist = calculateRange(smoothX, smoothY, coords.x, coords.y, 0, 0);
+            const dist = calculateRangeSq(smoothX, smoothY, coords.x, coords.y, 0, 0);
             return { track: t, dist };
           })
           .filter(item => item.dist <= CLICK_RADIUS)
@@ -2300,7 +2362,7 @@ export default function App() {
               if (weapon === 'PAC-3' && currentPac3 <= 0) return;        if (weapon === 'TAMIR' && currentTamir <= 0) return;
         if (weapon === 'THAAD' && currentThaad <= 0) return;
   
-        const rng = calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y, target.alt, 0);
+        const rng = calculateRangeSq(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y, target.alt, 0);
         if (rng > stats.range) {
           addLog(`${weapon} CANNOT ENGAGE TRK ${target.id} (OUT OF RANGE: ${rng.toFixed(1)} NM > ${stats.range} NM)`, 'WARN');
           return;
@@ -2327,14 +2389,14 @@ export default function App() {
                     addLog(`BIRDS AWAY. ENGAGING TRK ${id} WITH ${weapon} (-${costStr})`, 'ACTION');
         
         const missileSpdNmSec = stats.speedMach * MACH_TO_NM_SEC;
-        const closureRate = calculateClosureRate(BATTERY_POS, target, missileSpdNmSec);
+        const tof = calculateTrueTimeOfFlight(BATTERY_POS, target, missileSpdNmSec);
         
         const launchPos = { x: BATTERY_POS.x, y: BATTERY_POS.y };
         const currentSimTime = nowStore.now;
 
         setTracks(current => current.map(t => {
           if (t.id === id) {
-             let interceptTimeSecs = (rng / Math.max(0.1, closureRate));
+             let interceptTimeSecs = tof;
              const maxFlightTime = stats.range / missileSpdNmSec;
              let isPkHit = Math.random() <= stats.pk;
 
@@ -2352,7 +2414,7 @@ export default function App() {
                engagementTime: currentSimTime,
                interceptDuration: interceptTimeSecs * 1000,
                interceptTtl: Math.ceil(interceptTimeSecs),
-               initialRange: rng,
+               initialRange: Math.sqrt(rng), // rng here is squared from earlier check
                isPkHit
              };
             return { ...t, interceptors: [...(t.interceptors || []), newInterceptor] };
@@ -2561,6 +2623,7 @@ export default function App() {
                           trackId={trackId} 
                           isHooked={hookedTrackIds.includes(trackId)} 
                           cameraZoom={camera.zoom} 
+                          onStartVectorDrag={setVectoringTrackId}
                         />
                       );
                     })}

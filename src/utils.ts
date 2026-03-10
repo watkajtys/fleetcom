@@ -22,6 +22,13 @@ export const calculateRange = (x1: number, y1: number, x2: number, y2: number, a
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 };
 
+export const calculateRangeSq = (x1: number, y1: number, x2: number, y2: number, alt1: number = 0, alt2: number = 0) => {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  const dz = (alt1 - alt2) * FT_TO_NM;
+  return dx * dx + dy * dy + dz * dz;
+};
+
 export const calculateBearing = (x1: number, y1: number, x2: number, y2: number) => 
   Math.round(Math.atan2(x2 - x1, -(y2 - y1)) * (180 / Math.PI) + 360) % 360;
 
@@ -84,6 +91,57 @@ export const calculateClosureRate = (shooter: {x: number, y: number, alt?: numbe
   
   // Vc = V_missile + V_target_radial_towards_missile
   return missileSpdNmSec + targetRadialVel;
+};
+
+export const calculateTrueTimeOfFlight = (
+  launcher: {x: number, y: number, alt?: number},
+  target: Track,
+  interceptorSpdNmSec: number
+): number => {
+  const launcherAltNm = (launcher.alt || 0) * FT_TO_NM;
+  const targetAltNm = (target.alt || 0) * FT_TO_NM;
+
+  const tSpdNmSec = target.spd / 3600;
+  const radT = target.hdg * (Math.PI / 180);
+  const tvx = Math.sin(radT) * tSpdNmSec;
+  const tvy = -Math.cos(radT) * tSpdNmSec;
+  
+  let tvz = 0;
+  if (target.category === 'TBM' && calculateRange(target.x, target.y, BATTERY_POS.x, BATTERY_POS.y) < 40) {
+    tvz = -4000 * FT_TO_NM; // 4000 ft/sec descent
+  } else if (target.category === 'ROCKET') {
+    tvz = -250 * FT_TO_NM;
+  }
+
+  const dx = target.x - launcher.x;
+  const dy = target.y - launcher.y;
+  const dz = targetAltNm - launcherAltNm;
+
+  const a = tvx*tvx + tvy*tvy + tvz*tvz - interceptorSpdNmSec*interceptorSpdNmSec;
+  const b = 2 * (dx*tvx + dy*tvy + dz*tvz);
+  const c = dx*dx + dy*dy + dz*dz;
+
+  if (Math.abs(a) < 0.001) {
+    if (b < 0) return -c / b;
+    return Math.sqrt(c) / interceptorSpdNmSec; // fallback to straight line
+  }
+
+  const discriminant = b*b - 4*a*c;
+  if (discriminant < 0) {
+    return Math.sqrt(c) / interceptorSpdNmSec; // cannot intercept, fallback
+  }
+
+  const t1 = (-b + Math.sqrt(discriminant)) / (2*a);
+  const t2 = (-b - Math.sqrt(discriminant)) / (2*a);
+
+  let t = -1;
+  if (t1 >= 0 && t2 >= 0) t = Math.min(t1, t2);
+  else if (t1 >= 0) t = t1;
+  else if (t2 >= 0) t = t2;
+
+  if (t < 0) return Math.sqrt(c) / interceptorSpdNmSec; // fallback
+
+  return t;
 };
 
 // Calculates a lead intercept point based on constant fighter speed

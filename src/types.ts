@@ -50,6 +50,7 @@ export interface Track {
   maxFuel?: number;
   targetWaypoint?: {x: number, y: number} | null;
   patrolWaypoint?: {x: number, y: number} | null;
+  flightPath?: {x: number, y: number}[];
   targetId?: string;
 }
 

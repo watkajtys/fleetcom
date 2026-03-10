@@ -1,5 +1,5 @@
 import { Track, TrackCategory } from './types';
-import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint, MACH_TO_NM_SEC } from './utils';
+import { calculateRange, calculateBearing, calculateClosureRate, getThreatName, calculateLeadInterceptPoint, calculateTrueTimeOfFlight, MACH_TO_NM_SEC } from './utils';
 
 // We need to know where the battery/assets are to determine if a low-value target is a threat
 import { BATTERY_POS, WEAPON_STATS } from './constants';
@@ -166,9 +166,7 @@ export const processFighters = (
         const fighterId = track.id;
         
         const missileSpdNmSec = WEAPON_STATS['AMRAAM'].speedMach * MACH_TO_NM_SEC;
-        const closureRate = calculateClosureRate({x: track.x, y: track.y}, bestTarget, missileSpdNmSec);
-        
-        let interceptDurationSecs = minRange / Math.max(0.1, closureRate);
+        let interceptDurationSecs = calculateTrueTimeOfFlight({x: track.x, y: track.y, alt: track.alt}, bestTarget, missileSpdNmSec);
         const maxFlightTime = WEAPON_STATS['AMRAAM'].range / missileSpdNmSec;
 
         events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
@@ -212,25 +210,36 @@ export const processFighters = (
         if (track.targetId !== bestTarget.id) {
           events.push({ type: 'LOG', message: `${track.id}: Intercepting TRACK ${bestTarget.id}.`, logType: 'INFO' });
         }
-        
+
         // Assume maximum intercept speed (1300 knots) for lead calculation
         const leadPoint = calculateLeadInterceptPoint({x: track.x, y: track.y, spd: 1300}, bestTarget);
-        
+
         return { ...track, targetWaypoint: leadPoint, targetId: bestTarget.id };
+        }
+        } else if (track.targetId) {
+        // If we HAD a target (targetId is set) but bestTarget is null, it means the target was destroyed or lost.
+        // Clear the targetId so we can return to patrol.
+        events.push({ type: 'LOG', message: `${track.id}: Target lost or destroyed. Resuming patrol.`, logType: 'INFO' });
+        return { ...track, targetId: undefined, targetWaypoint: null };
+        }    
+    // If no target, return to flight path or patrol waypoint
+    if (track.flightPath && track.flightPath.length > 0) {
+      const nextWp = track.flightPath[0];
+      const isAlreadyTarget = track.targetWaypoint?.x === nextWp.x && track.targetWaypoint?.y === nextWp.y;
+      const isAtPatrol = calculateRange(track.x, track.y, nextWp.x, nextWp.y) <= 1.5;
+
+      if (!isAlreadyTarget && !isAtPatrol) {
+        return { ...track, targetWaypoint: nextWp };
       }
-    }
-    
-    // If no target, return to patrol waypoint
-    if (track.patrolWaypoint) {
+    } else if (track.patrolWaypoint) {
       // Don't re-assign if it's already the target, or if we are already there (target is null from arriving)
       const isAlreadyTarget = track.targetWaypoint?.x === track.patrolWaypoint.x && track.targetWaypoint?.y === track.patrolWaypoint.y;
       const isAtPatrol = calculateRange(track.x, track.y, track.patrolWaypoint.x, track.patrolWaypoint.y) <= 1.5;
-      
+
       if (!isAlreadyTarget && !isAtPatrol) {
         return { ...track, targetWaypoint: track.patrolWaypoint };
       }
-    }
-    
+    }    
     return track;
   });
 };
