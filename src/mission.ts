@@ -136,13 +136,12 @@ export const MISSION_STEPS: MissionEvent[] = [
     action: () => {
       useTrackStore.getState().setWcs('FREE');
       useTrackStore.getState().setDoctrine({
-        autoEngageTBM: 1,
-        autoEngageCM: 1,
-        autoEngageUAS: 1,
-        autoEngageRocket: 1
+        thaad: 1,
+        pac3: 1,
+        tamir: 1,
+        cram: 1
       });
-    }
-  },
+    }  },
   {
     time: 40,
     message: 'INTEL: TBM LAUNCH CONFIRMED. IMPACT DUBAI 90 SECONDS.',

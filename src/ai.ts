@@ -167,8 +167,9 @@ export const processFighters = (
         
         const missileSpdNmSec = WEAPON_STATS['AMRAAM'].speedMach * MACH_TO_NM_SEC;
         const closureRate = calculateClosureRate({x: track.x, y: track.y}, bestTarget, missileSpdNmSec);
-        const interceptTimeSecs = minRange / Math.max(0.1, closureRate);
-        const interceptTimeMs = interceptTimeSecs * 1000;
+        
+        let interceptDurationSecs = minRange / Math.max(0.1, closureRate);
+        const maxFlightTime = WEAPON_STATS['AMRAAM'].range / missileSpdNmSec;
 
         events.push({ type: 'LOG', message: `${fighterId}: Fox-3 TRACK ${targetId}.`, logType: 'ACTION' });
         events.push({ type: 'COST', amount: 1200000 });
@@ -176,7 +177,14 @@ export const processFighters = (
 
         // Pre-calculate Pk for live destruction
         const pkValue = WEAPON_STATS['AMRAAM'].pk;
-        const isPkHit = Math.random() <= pkValue;
+        let isPkHit = Math.random() <= pkValue;
+        
+        if (interceptDurationSecs > maxFlightTime) {
+          interceptDurationSecs = maxFlightTime;
+          isPkHit = false; // Out of fuel
+        }
+
+        const interceptTimeMs = interceptDurationSecs * 1000;
 
         const targetInNext = trackMap.get(targetId); // O(1) lookup
         if (targetInNext) {
@@ -188,7 +196,7 @@ export const processFighters = (
             launchPos: { x: track.x, y: track.y },
             engagementTime: now,
             interceptDuration: interceptTimeMs,
-            interceptTtl: Math.ceil(interceptTimeSecs),
+            interceptTtl: Math.ceil(interceptDurationSecs),
             isPkHit
           });
         }

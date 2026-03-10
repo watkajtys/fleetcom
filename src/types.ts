@@ -62,8 +62,8 @@ export interface SystemLog {
 }
 
 export interface EngagementDoctrine {
-  autoEngageTBM: 0 | 1 | 2;
-  autoEngageCM: 0 | 1 | 2;
-  autoEngageUAS: 0 | 1 | 2;
-  autoEngageRocket: 0 | 1 | 2;
+  thaad: 0 | 1 | 2;
+  pac3: 0 | 1 | 2;
+  tamir: 0 | 1 | 2;
+  cram: 0 | 1 | 2;
 }

@@ -59,7 +59,7 @@ export const useTrackStore = create<TrackStore>((set, get) => {
     enemyCost: 0,
     wcs: 'TIGHT',
     setWcs: (wcs) => set({ wcs }),
-    doctrine: { autoEngageTBM: 0, autoEngageCM: 0, autoEngageUAS: 0, autoEngageRocket: 0 },
+    doctrine: { thaad: 0, pac3: 0, tamir: 0, cram: 1 },
     setDoctrine: (doctrineOrUpdater) => set(state => ({
       doctrine: typeof doctrineOrUpdater === 'function' ? doctrineOrUpdater(state.doctrine) : doctrineOrUpdater
     })),
